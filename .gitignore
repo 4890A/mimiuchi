@@ -39,7 +39,11 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # claude / editor / OS
-.claude/settings.local.json
+.claude/
+.mcp.json
+AGENTS.md
+**/AGENTS.md
+**/CLAUDE.md
 .vscode/
 .idea/
 .DS_Store
