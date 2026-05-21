@@ -155,6 +155,7 @@ export function SearchBar() {
           <CommandPrimitive.Input asChild value={q} onValueChange={setQ}>
             <Input
               ref={inputRef}
+              suppressHydrationWarning
               placeholder="Search seiyuu, circles, tags, works…"
               className={cn("pl-9", (pending || loading) && "pr-8")}
               onFocus={() => setOpen(true)}

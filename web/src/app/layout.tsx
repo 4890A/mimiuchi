@@ -41,6 +41,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${notoJp.variable} h-full antialiased`}
     >
       <head>
+        <meta
+          name="format-detection"
+          content="telephone=no,date=no,address=no,email=no"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(localStorage.getItem('nsfw:blur')==='1')document.documentElement.classList.add('nsfw-blur')}catch(e){}`,
