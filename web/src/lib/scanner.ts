@@ -57,6 +57,8 @@ export interface ScanOptions {
   libraryRoot: string;
   coversDir: string;
   forceMetadata?: boolean;
+  /** If set, only scan works whose id is in this list. */
+  filterIds?: ReadonlySet<string>;
   onEvent?: (event: ScanEvent) => void;
 }
 
@@ -140,6 +142,12 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     emit({ type: "error", message });
     emit({ type: "done", result });
     return result;
+  }
+
+  if (opts.filterIds) {
+    for (const id of workFolders.keys()) {
+      if (!opts.filterIds.has(id)) workFolders.delete(id);
+    }
   }
 
   result.worksFound = workFolders.size;

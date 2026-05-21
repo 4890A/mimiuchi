@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Heart, Library, RefreshCw, Mic2, RotateCw, Timer, Users } from "lucide-react";
+import { Heart, Library, RefreshCw, Mic2, RotateCw, Settings as SettingsIcon, Timer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NsfwBlurToggle } from "@/components/nsfw-blur-toggle";
@@ -94,6 +94,19 @@ export function TopNav() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          title="Settings"
+          className={cn(
+            "inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
+            pathname.startsWith("/settings")
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+          )}
+        >
+          <SettingsIcon className="h-5 w-5" />
+        </Link>
         <NsfwBlurToggle />
         <ThemeToggle />
       </div>

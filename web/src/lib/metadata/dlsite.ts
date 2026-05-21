@@ -1,3 +1,4 @@
+import { fetch as undiciFetch, type Dispatcher } from "undici";
 import { coverBucket, type NormalizedWork } from "./types";
 
 const ANNOUNCE_URL = (id: string) =>
@@ -71,10 +72,11 @@ function fallbackCoverUrl(id: string): string {
 
 export async function fetchFromDlsite(
   id: string,
+  dispatcher?: Dispatcher,
 ): Promise<NormalizedWork | null> {
-  const res = await fetch(ANNOUNCE_URL(id), {
+  const res = await undiciFetch(ANNOUNCE_URL(id), {
     headers: COMMON_HEADERS,
-    cache: "no-store",
+    dispatcher,
   });
   if (!res.ok) return null;
   const data = (await res.json()) as unknown;

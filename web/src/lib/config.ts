@@ -10,11 +10,11 @@ function resolveDir(envVar: string, fallback: string): string {
 
 const projectRoot = path.resolve(process.cwd(), "..");
 
-export const LIBRARY_ROOT = resolveDir(
+const DEFAULT_LIBRARY_ROOT = resolveDir(
   "KIKOERU_LIBRARY_ROOT",
   path.join(projectRoot, "media"),
 );
-export const COVERS_DIR = resolveDir(
+const DEFAULT_COVERS_DIR = resolveDir(
   "KIKOERU_COVERS_DIR",
   path.join(projectRoot, "covers"),
 );
@@ -22,6 +22,16 @@ export const DATA_DIR = resolveDir(
   "KIKOERU_DATA_DIR",
   path.join(projectRoot, "data"),
 );
+
+export const LIBRARY_ROOT = DEFAULT_LIBRARY_ROOT;
+export const COVERS_DIR = DEFAULT_COVERS_DIR;
+
+export function resolveLibraryRoot(override?: string | null): string {
+  return override?.trim() ? path.resolve(override.trim()) : DEFAULT_LIBRARY_ROOT;
+}
+export function resolveCoversDir(override?: string | null): string {
+  return override?.trim() ? path.resolve(override.trim()) : DEFAULT_COVERS_DIR;
+}
 
 function loadOrCreateSessionSecret(): string {
   if (process.env.KIKOERU_SESSION_SECRET) return process.env.KIKOERU_SESSION_SECRET;

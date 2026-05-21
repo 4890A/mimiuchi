@@ -267,3 +267,14 @@ export function getWorkMetadataCounts(id: string): {
 export function listWorks() {
   return db.select().from(works).all();
 }
+
+export function listWorkIdsMissingSeiyuu(): string[] {
+  const rows = db
+    .select({ id: works.id })
+    .from(works)
+    .leftJoin(workVoiceActors, eq(workVoiceActors.workId, works.id))
+    .groupBy(works.id)
+    .having(sql`COUNT(${workVoiceActors.voiceActorId}) = 0`)
+    .all();
+  return rows.map((r) => r.id);
+}

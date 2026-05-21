@@ -42,7 +42,7 @@ const INITIAL_STATE: ScanProgressState = {
 };
 
 export type ScanMode =
-  | { kind: "library"; force?: boolean }
+  | { kind: "library"; force?: boolean; missingSeiyuu?: boolean }
   | { kind: "durations"; all?: boolean };
 
 export interface ScanProgressHandle {
@@ -239,6 +239,9 @@ export function useScanProgress(): {
       startMsg = mode.all
         ? "Reading durations for all tracks…"
         : "Reading missing track durations…";
+    } else if (mode.missingSeiyuu) {
+      url = "/api/scan?mode=missing-seiyuu";
+      startMsg = "Re-scanning works missing seiyuu…";
     } else if (mode.force) {
       url = "/api/scan?force=1";
       startMsg = "Starting full rescan…";
