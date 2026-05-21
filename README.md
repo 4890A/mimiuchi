@@ -4,10 +4,9 @@ A personal audio library web app for browsing and playing locally-stored audio w
 
 **Stack:** Next.js 16 · React 19 · TypeScript · SQLite (better-sqlite3) + Drizzle ORM · base-ui + shadcn · MiniSearch + kuroshiro
 
-![Desktop](assets/screenshot_desktop.png)
-
 <p align="center">
-  <img src="assets/screenshot_mobile.png" alt="Mobile" width="320">
+  <img src="assets/screenshot_desktop.png" alt="Desktop" width="70%">
+  <img src="assets/screenshot_mobile.png" alt="Mobile" width="25%">
 </p>
 
 ## Prerequisites
