@@ -27,15 +27,9 @@ Edit `web/.env.local` and set the variables below.
 | --- | --- | --- |
 | `KIKOERU_LIBRARY_ROOT` | yes | Absolute path to the folder containing your RJ-coded work directories |
 | `KIKOERU_PASSWORD` | yes | Shared password used to log in (any non-empty string) |
-| `KIKOERU_SESSION_SECRET` | yes | 32+ character random string used to encrypt the session cookie |
+| `KIKOERU_SESSION_SECRET` | no | Overrides the session-cookie signing key. If unset, a random 32-byte secret is generated on first run and stored in `<KIKOERU_DATA_DIR>/session-secret` |
 | `KIKOERU_DATA_DIR` | no | Where the SQLite database lives (defaults to `../data` relative to `web/`) |
 | `KIKOERU_COVERS_DIR` | no | Where cover art is cached (defaults to `<project-root>/covers`) |
-
-Generate a session secret with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
 
 ## Running
 
