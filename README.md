@@ -43,11 +43,12 @@ All commands run from the `web/` directory.
 
 ```bash
 pnpm db:push        # create / migrate the SQLite schema
-pnpm scan           # scan KIKOERU_LIBRARY_ROOT and fetch metadata
 pnpm dev            # start the dev server on http://localhost:3000
 ```
 
-On first visit, log in with `KIKOERU_PASSWORD`. Re-run `pnpm scan` whenever you add new works to the library.
+On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from the in-app **Scan** button — it walks `KIKOERU_LIBRARY_ROOT`, fetches metadata, and streams progress to a panel in the bottom-right. Re-run whenever you add new works.
+
+> A `pnpm scan` CLI script also exists (`web/scripts/scan.ts`) if you'd rather run the scan headlessly.
 
 ### Other scripts
 
