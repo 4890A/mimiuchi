@@ -1,6 +1,7 @@
 import "server-only";
-import { eq, desc, sql, asc, inArray, like, or, and } from "drizzle-orm";
+import { eq, desc, sql, asc, inArray, and } from "drizzle-orm";
 import { db, sqlite } from "./client";
+import { searchWorkIdsForQuery } from "../search/index-builder";
 import {
   works,
   circles,
@@ -36,17 +37,15 @@ export interface LibraryFilters {
   offset?: number;
 }
 
-export function listWorksFiltered(f: LibraryFilters = {}): WorkSummary[] {
+export async function listWorksFiltered(
+  f: LibraryFilters = {},
+): Promise<WorkSummary[]> {
   const conds = [];
+  let relevanceOrder: string[] | null = null;
   if (f.q && f.q.trim()) {
-    const pat = `%${f.q.trim()}%`;
-    conds.push(
-      or(
-        like(works.title, pat),
-        like(works.titleKana, pat),
-        like(works.id, pat),
-      )!,
-    );
+    relevanceOrder = await searchWorkIdsForQuery(f.q.trim(), 1000);
+    if (relevanceOrder.length === 0) return [];
+    conds.push(inArray(works.id, relevanceOrder));
   }
   if (f.circleIds && f.circleIds.length)
     conds.push(inArray(works.circleId, f.circleIds));
@@ -68,18 +67,30 @@ export function listWorksFiltered(f: LibraryFilters = {}): WorkSummary[] {
 
   if (conds.length > 0) baseQuery = baseQuery.where(and(...conds));
 
-  const defaultDir: "asc" | "desc" = f.sort === "title" ? "asc" : "desc";
-  const dir = f.dir ?? defaultDir;
-  const order = dir === "asc" ? asc : desc;
-  if (f.sort === "title") baseQuery = baseQuery.orderBy(order(works.title));
-  else if (f.sort === "release")
-    baseQuery = baseQuery.orderBy(order(works.releaseDate));
-  else baseQuery = baseQuery.orderBy(order(works.createdAt));
+  const useRelevance = relevanceOrder !== null && !f.sort;
+  if (!useRelevance) {
+    const defaultDir: "asc" | "desc" = f.sort === "title" ? "asc" : "desc";
+    const dir = f.dir ?? defaultDir;
+    const order = dir === "asc" ? asc : desc;
+    if (f.sort === "title") baseQuery = baseQuery.orderBy(order(works.title));
+    else if (f.sort === "release")
+      baseQuery = baseQuery.orderBy(order(works.releaseDate));
+    else baseQuery = baseQuery.orderBy(order(works.createdAt));
 
-  if (f.limit) baseQuery = baseQuery.limit(f.limit);
-  if (f.offset) baseQuery = baseQuery.offset(f.offset);
+    if (f.limit) baseQuery = baseQuery.limit(f.limit);
+    if (f.offset) baseQuery = baseQuery.offset(f.offset);
+  }
 
   let rows = baseQuery.all();
+
+  if (useRelevance && relevanceOrder) {
+    const rank = new Map<string, number>();
+    relevanceOrder.forEach((id, i) => rank.set(id, i));
+    rows.sort(
+      (a, b) =>
+        (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
+    );
+  }
 
   if (f.tagIds && f.tagIds.length) {
     const matches = db
@@ -100,6 +111,10 @@ export function listWorksFiltered(f: LibraryFilters = {}): WorkSummary[] {
       .all();
     const ids = new Set(matches.map((m) => m.workId));
     rows = rows.filter((r) => ids.has(r.id));
+  }
+
+  if (useRelevance && f.limit) {
+    rows = rows.slice(f.offset ?? 0, (f.offset ?? 0) + f.limit);
   }
 
   if (rows.length === 0) return [];
@@ -233,8 +248,25 @@ export function getWorkDetail(workId: string) {
   };
 }
 
-export function listAllTags() {
-  return db
+type TagRow = { id: number; name: string; nameEn: string | null; workCount: number };
+type VARow = { id: number; name: string; nameEn: string | null; workCount: number };
+type CircleRow = { id: number; name: string; nameEn: string | null; workCount: number };
+
+let tagsCache: TagRow[] | null = null;
+let vasCache: VARow[] | null = null;
+let circlesCache: CircleRow[] | null = null;
+
+/** Invalidate the cached tag/voice-actor/circle filter lists. Call after any
+ *  write that adds/removes works, tags, voice actors, or circles. */
+export function invalidateFilterListCache() {
+  tagsCache = null;
+  vasCache = null;
+  circlesCache = null;
+}
+
+export function listAllTags(): TagRow[] {
+  if (tagsCache) return tagsCache;
+  tagsCache = db
     .select({
       id: tags.id,
       name: tags.name,
@@ -246,10 +278,12 @@ export function listAllTags() {
     .groupBy(tags.id)
     .orderBy(desc(sql`c`))
     .all();
+  return tagsCache;
 }
 
-export function listAllVoiceActors() {
-  return db
+export function listAllVoiceActors(): VARow[] {
+  if (vasCache) return vasCache;
+  vasCache = db
     .select({
       id: voiceActors.id,
       name: voiceActors.name,
@@ -261,10 +295,12 @@ export function listAllVoiceActors() {
     .groupBy(voiceActors.id)
     .orderBy(desc(sql`c`))
     .all();
+  return vasCache;
 }
 
-export function listAllCircles() {
-  return db
+export function listAllCircles(): CircleRow[] {
+  if (circlesCache) return circlesCache;
+  circlesCache = db
     .select({
       id: circles.id,
       name: circles.name,
@@ -276,6 +312,7 @@ export function listAllCircles() {
     .groupBy(circles.id)
     .orderBy(desc(sql`c`))
     .all();
+  return circlesCache;
 }
 
 export interface CircleWithRecentWorks {

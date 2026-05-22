@@ -11,6 +11,7 @@ import {
   getWorkMetadataCounts,
 } from "./db/repository";
 import { invalidateSearchIndex } from "./search/index-builder";
+import { invalidateFilterListCache } from "./db/queries";
 import fsSync from "node:fs";
 
 const AUDIO_EXTS = new Set([
@@ -256,6 +257,7 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
 
   invalidateSearchIndex();
+  invalidateFilterListCache();
   emit({ type: "done", result });
   return result;
 }

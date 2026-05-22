@@ -20,6 +20,9 @@ export interface IndexedDoc {
   context?: string;
   /** Used for ranking ties (more works = more likely). */
   workCount: number;
+  /** For seiyuu/circle/tag: pre-resolved work IDs that match this entity.
+   *  For work: undefined (refId IS the work id). */
+  workIds?: string[];
 }
 
 interface BuildResult {
@@ -75,11 +78,13 @@ async function build(): Promise<BuildResult> {
     name: string;
     name_en: string | null;
     work_count: number;
+    work_ids?: string | null;
   };
 
   const seiyuuRows = sqlite
     .prepare(
-      `SELECT va.id, va.name, va.name_en, COUNT(wva.work_id) AS work_count
+      `SELECT va.id, va.name, va.name_en, COUNT(wva.work_id) AS work_count,
+              GROUP_CONCAT(wva.work_id) AS work_ids
        FROM voice_actors va
        LEFT JOIN work_voice_actors wva ON wva.voice_actor_id = va.id
        GROUP BY va.id
@@ -89,7 +94,8 @@ async function build(): Promise<BuildResult> {
 
   const circleRows = sqlite
     .prepare(
-      `SELECT c.id, c.name, c.name_en, COUNT(w.id) AS work_count
+      `SELECT c.id, c.name, c.name_en, COUNT(w.id) AS work_count,
+              GROUP_CONCAT(w.id) AS work_ids
        FROM circles c
        LEFT JOIN works w ON w.circle_id = c.id
        GROUP BY c.id
@@ -99,7 +105,8 @@ async function build(): Promise<BuildResult> {
 
   const tagRows = sqlite
     .prepare(
-      `SELECT t.id, t.name, t.name_en, COUNT(wt.work_id) AS work_count
+      `SELECT t.id, t.name, t.name_en, COUNT(wt.work_id) AS work_count,
+              GROUP_CONCAT(wt.work_id) AS work_ids
        FROM tags t
        LEFT JOIN work_tags wt ON wt.tag_id = t.id
        GROUP BY t.id
@@ -118,7 +125,7 @@ async function build(): Promise<BuildResult> {
 
   async function add(
     type: SuggestionType,
-    rows: Array<{ id: number | string; name: string; name_en?: string | null; context?: string; work_count: number }>,
+    rows: Array<{ id: number | string; name: string; name_en?: string | null; context?: string; work_count: number; work_ids?: string | null }>,
   ) {
     // Process in parallel batches so kuroshiro init is amortized.
     const BATCH = 32;
@@ -138,6 +145,10 @@ async function build(): Promise<BuildResult> {
             romaji: phon.romaji,
             context: r.context,
             workCount: r.work_count,
+            workIds:
+              type !== "work" && r.work_ids
+                ? r.work_ids.split(",").filter(Boolean)
+                : undefined,
           };
           return doc;
         }),
@@ -201,12 +212,14 @@ export interface Suggestion {
 export async function searchSuggestions(
   rawQuery: string,
   limit = 12,
+  opts: { type?: SuggestionType } = {},
 ): Promise<Suggestion[]> {
   const { normalizeQuery } = await import("./transliterate");
   const q = normalizeQuery(rawQuery);
   if (!q.raw) return [];
 
   const { index, docs } = await getSearchIndex();
+  const typeFilter = opts.type;
 
   // Build a multi-term query: original + romaji + hiragana variants.
   // MiniSearch's search() accepts a string; we run multiple searches and merge.
@@ -225,7 +238,8 @@ export async function searchSuggestions(
     for (const h of hits) {
       const doc = docs.get(String(h.id));
       if (!doc) continue;
-      const weighted = h.score * TYPE_WEIGHTS[doc.type];
+      if (typeFilter && doc.type !== typeFilter) continue;
+      const weighted = typeFilter ? h.score : h.score * TYPE_WEIGHTS[doc.type];
       const prev = merged.get(doc.id);
       if (!prev || weighted > prev.score) {
         merged.set(doc.id, { doc, score: weighted });
@@ -244,4 +258,55 @@ export async function searchSuggestions(
       workCount: doc.workCount,
       score,
     }));
+}
+
+/**
+ * Fuzzy-search across all entities and return a set of work IDs whose title,
+ * circle, voice actor(s), or tags match `rawQuery`. Used to drive the library
+ * page's "search as you type" filter. Ordered by relevance.
+ */
+export async function searchWorkIdsForQuery(
+  rawQuery: string,
+  limit = 500,
+): Promise<string[]> {
+  const { normalizeQuery } = await import("./transliterate");
+  const q = normalizeQuery(rawQuery);
+  if (!q.raw) return [];
+
+  const { index, docs } = await getSearchIndex();
+
+  const variants = new Set<string>();
+  variants.add(q.raw);
+  if (q.romaji && q.romaji !== q.raw) variants.add(q.romaji);
+  if (q.hiragana) variants.add(q.hiragana);
+
+  // workId -> best score seen so far
+  const workScore = new Map<string, number>();
+
+  for (const v of variants) {
+    const hits = index.search(v, {
+      prefix: true,
+      fuzzy: 0.3,
+      boost: { name: 3, hiragana: 2.5, romaji: 2, nameEn: 2, context: 0.5 },
+    });
+    for (const h of hits) {
+      const doc = docs.get(String(h.id));
+      if (!doc) continue;
+      const weighted = h.score * TYPE_WEIGHTS[doc.type];
+      if (doc.type === "work") {
+        const prev = workScore.get(doc.refId) ?? -Infinity;
+        if (weighted > prev) workScore.set(doc.refId, weighted);
+      } else if (doc.workIds) {
+        for (const wid of doc.workIds) {
+          const prev = workScore.get(wid) ?? -Infinity;
+          if (weighted > prev) workScore.set(wid, weighted);
+        }
+      }
+    }
+  }
+
+  return Array.from(workScore.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([id]) => id);
 }

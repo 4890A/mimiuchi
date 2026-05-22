@@ -1,6 +1,6 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -70,6 +70,12 @@ export function CircleFilter({
   );
 }
 
+const PARAM_TO_SUGGEST_TYPE: Record<string, "tag" | "seiyuu" | "circle"> = {
+  tags: "tag",
+  va: "seiyuu",
+  circles: "circle",
+};
+
 function FilterList({
   items,
   selected,
@@ -82,17 +88,67 @@ function FilterList({
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState("");
+  const [fuzzyIds, setFuzzyIds] = useState<number[] | null>(null);
+
+  const itemsById = useMemo(() => {
+    const m = new Map<number, FilterItem>();
+    for (const it of items) m.set(it.id, it);
+    return m;
+  }, [items]);
+
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (!trimmed) {
+      setFuzzyIds(null);
+      return;
+    }
+    const type = PARAM_TO_SUGGEST_TYPE[paramKey];
+    if (!type) return;
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/search/suggest?q=${encodeURIComponent(trimmed)}&type=${type}&limit=200`,
+          { signal: ctrl.signal },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          suggestions: Array<{ id: string }>;
+        };
+        const ids = data.suggestions
+          .map((s) => parseInt(s.id, 10))
+          .filter(Number.isFinite);
+        setFuzzyIds(ids);
+      } catch {
+        // aborted or network error — ignore
+      }
+    }, 120);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [q, paramKey]);
+
   const filtered = useMemo(() => {
-    const lc = q.trim().toLowerCase();
-    if (!lc) return items.slice(0, 200);
-    return items
-      .filter(
-        (it) =>
-          it.name.toLowerCase().includes(lc) ||
-          it.nameEn?.toLowerCase().includes(lc),
-      )
-      .slice(0, 200);
-  }, [items, q]);
+    if (!q.trim()) return items.slice(0, 200);
+    if (fuzzyIds === null) {
+      // Fall back to a quick substring match while suggestions load.
+      const lc = q.trim().toLowerCase();
+      return items
+        .filter(
+          (it) =>
+            it.name.toLowerCase().includes(lc) ||
+            it.nameEn?.toLowerCase().includes(lc),
+        )
+        .slice(0, 200);
+    }
+    const out: FilterItem[] = [];
+    for (const id of fuzzyIds) {
+      const it = itemsById.get(id);
+      if (it) out.push(it);
+    }
+    return out;
+  }, [items, itemsById, q, fuzzyIds]);
 
   return (
     <div>

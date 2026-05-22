@@ -1,5 +1,5 @@
 "use client";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { Search, Mic2, Users, Tag as TagIcon, Disc3, Loader2 } from "lucide-react";
@@ -54,7 +54,9 @@ function TypeIcon({ type }: { type: Suggestion["type"] }) {
 export function SearchBar() {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
   const [q, setQ] = useState(params.get("q") ?? "");
+  const urlSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,6 +110,29 @@ export function SearchBar() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [q]);
+
+  // While on the library page, mirror q into the URL (debounced) so the grid
+  // filters live as the user types. Skip elsewhere — typing in search on a
+  // detail page must not navigate the user away.
+  useEffect(() => {
+    if (pathname !== "/") return;
+    if (urlSyncRef.current) clearTimeout(urlSyncRef.current);
+    const trimmed = q.trim();
+    const current = params.get("q") ?? "";
+    if (trimmed === current) return;
+    urlSyncRef.current = setTimeout(() => {
+      const usp = new URLSearchParams(params.toString());
+      if (trimmed) usp.set("q", trimmed);
+      else usp.delete("q");
+      const qs = usp.toString();
+      startTransition(() =>
+        router.replace(qs ? `/?${qs}` : "/", { scroll: false }),
+      );
+    }, 180);
+    return () => {
+      if (urlSyncRef.current) clearTimeout(urlSyncRef.current);
+    };
+  }, [q, pathname, params, router]);
 
   // Close on outside click.
   useEffect(() => {

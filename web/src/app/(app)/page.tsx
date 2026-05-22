@@ -50,17 +50,15 @@ export default async function LibraryPage({
   const recent = hasFilters ? [] : listRecentlyPlayedWorks(8);
 
   const [works, allTags, allVAs, allCircles] = await Promise.all([
-    Promise.resolve(
-      listWorksFiltered({
-        q: sp.q,
-        tagIds,
-        voiceActorIds: vaIds,
-        circleIds,
-        sort: sp.sort ?? "added",
-        dir: sp.dir,
-        limit: 200,
-      }),
-    ),
+    listWorksFiltered({
+      q: sp.q,
+      tagIds,
+      voiceActorIds: vaIds,
+      circleIds,
+      sort: sp.sort,
+      dir: sp.dir,
+      limit: 200,
+    }),
     Promise.resolve(listAllTags()),
     Promise.resolve(listAllVoiceActors()),
     Promise.resolve(listAllCircles()),
