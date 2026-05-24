@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -28,7 +29,7 @@ import { useScanProgress } from "@/components/scan-progress";
 interface Settings {
   dlsiteProxyUrl: string;
   dlsiteProxyEnabled: boolean;
-  libraryRoot: string;
+  libraryRoots: string[];
   coversDir: string;
 }
 
@@ -44,23 +45,33 @@ export function SettingsForm({
   missingSeiyuuCount,
 }: {
   initial: Settings;
-  effective: { libraryRoot: string; coversDir: string };
+  effective: { libraryRoots: string[]; coversDir: string };
   missingSeiyuuCount: number;
 }) {
   const router = useRouter();
   const scan = useScanProgress();
   const [values, setValues] = useState<Settings>(initial);
+  const [rootsText, setRootsText] = useState(initial.libraryRoots.join("\n"));
   const [saved, setSaved] = useState<Settings>(initial);
   const [saving, setSaving] = useState(false);
   const [test, setTest] = useState<TestResult>({ state: "idle" });
 
+  const rootsFromText = rootsText
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const rootsChanged =
+    rootsFromText.length !== saved.libraryRoots.length ||
+    rootsFromText.some((r, i) => r !== saved.libraryRoots[i]);
+
   const dirty =
     values.dlsiteProxyUrl !== saved.dlsiteProxyUrl ||
     values.dlsiteProxyEnabled !== saved.dlsiteProxyEnabled ||
-    values.libraryRoot !== saved.libraryRoot ||
+    rootsChanged ||
     values.coversDir !== saved.coversDir;
 
-  async function save(next: Settings = values) {
+  async function save(next: Settings = { ...values, libraryRoots: rootsFromText }) {
     setSaving(true);
     try {
       const res = await fetch("/api/settings", {
@@ -71,6 +82,7 @@ export function SettingsForm({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const persisted = (await res.json()) as Settings;
       setValues(persisted);
+      setRootsText(persisted.libraryRoots.join("\n"));
       setSaved(persisted);
       toast.success("Settings saved");
       router.refresh();
@@ -119,8 +131,12 @@ export function SettingsForm({
               type="checkbox"
               checked={values.dlsiteProxyEnabled}
               onChange={(e) => {
-                const next = { ...values, dlsiteProxyEnabled: e.target.checked };
-                setValues(next);
+                const next = {
+                  ...values,
+                  dlsiteProxyEnabled: e.target.checked,
+                  libraryRoots: rootsFromText,
+                };
+                setValues({ ...values, dlsiteProxyEnabled: e.target.checked });
                 void save(next);
               }}
               className="h-4 w-4"
@@ -178,18 +194,25 @@ export function SettingsForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Library root</label>
-            <Input
-              value={values.libraryRoot}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, libraryRoot: e.target.value }))
-              }
-              placeholder={effective.libraryRoot}
+            <label className="text-xs text-muted-foreground">
+              Library roots (one path per line)
+            </label>
+            <Textarea
+              value={rootsText}
+              onChange={(e) => setRootsText(e.target.value)}
+              placeholder={effective.libraryRoots.join("\n")}
               spellCheck={false}
+              rows={Math.max(3, effective.libraryRoots.length + 1)}
+              className="font-mono text-xs"
             />
-            <p className="text-xs text-muted-foreground">
-              Effective: <span className="font-mono">{effective.libraryRoot}</span>
-            </p>
+            <div className="text-xs text-muted-foreground">
+              Effective:
+              <ul className="mt-1 space-y-0.5">
+                {effective.libraryRoots.map((r) => (
+                  <li key={r} className="font-mono">{r}</li>
+                ))}
+              </ul>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Covers directory</label>

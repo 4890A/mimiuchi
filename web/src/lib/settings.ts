@@ -6,14 +6,15 @@ import { settings as settingsTable } from "./db/schema";
 export interface AppSettings {
   dlsiteProxyUrl: string;
   dlsiteProxyEnabled: boolean;
-  libraryRoot: string;
+  /** One or more library roots. Empty array → use env default. */
+  libraryRoots: string[];
   coversDir: string;
 }
 
 const KEYS = {
   dlsiteProxyUrl: "dlsite.proxy.url",
   dlsiteProxyEnabled: "dlsite.proxy.enabled",
-  libraryRoot: "scan.libraryRoot",
+  libraryRoots: "scan.libraryRoot",
   coversDir: "scan.coversDir",
 } as const;
 
@@ -33,11 +34,19 @@ function writeKey(key: string, value: string): void {
     .run();
 }
 
+function parseRoots(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function getSettings(): AppSettings {
   return {
     dlsiteProxyUrl: readKey(KEYS.dlsiteProxyUrl) ?? "",
     dlsiteProxyEnabled: readKey(KEYS.dlsiteProxyEnabled) === "1",
-    libraryRoot: readKey(KEYS.libraryRoot) ?? "",
+    libraryRoots: parseRoots(readKey(KEYS.libraryRoots)),
     coversDir: readKey(KEYS.coversDir) ?? "",
   };
 }
@@ -49,8 +58,11 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   if (partial.dlsiteProxyEnabled !== undefined) {
     writeKey(KEYS.dlsiteProxyEnabled, partial.dlsiteProxyEnabled ? "1" : "0");
   }
-  if (partial.libraryRoot !== undefined) {
-    writeKey(KEYS.libraryRoot, partial.libraryRoot.trim());
+  if (partial.libraryRoots !== undefined) {
+    const cleaned = partial.libraryRoots
+      .map((s) => s.trim())
+      .filter(Boolean);
+    writeKey(KEYS.libraryRoots, cleaned.join("\n"));
   }
   if (partial.coversDir !== undefined) {
     writeKey(KEYS.coversDir, partial.coversDir.trim());

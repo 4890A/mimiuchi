@@ -268,6 +268,41 @@ export function listWorks() {
   return db.select().from(works).all();
 }
 
+export interface WorkScanSnapshot {
+  metadataSource: string | null;
+  lastMetadataSyncAt: Date | null;
+  lastScannedAt: Date | null;
+  coverPath: string | null;
+  tagCount: number;
+}
+
+/** Bulk-load the per-work fields the scanner needs to decide whether a work
+ *  is already fully indexed. Avoids N queries during incremental scans. */
+export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
+  const rows = db
+    .select({
+      id: works.id,
+      metadataSource: works.metadataSource,
+      lastMetadataSyncAt: works.lastMetadataSyncAt,
+      lastScannedAt: works.lastScannedAt,
+      coverPath: works.coverPath,
+      tagCount: sql<number>`(SELECT COUNT(*) FROM work_tags WHERE work_tags.work_id = ${works.id})`.as("tag_count"),
+    })
+    .from(works)
+    .all();
+  const out = new Map<string, WorkScanSnapshot>();
+  for (const r of rows) {
+    out.set(r.id, {
+      metadataSource: r.metadataSource,
+      lastMetadataSyncAt: r.lastMetadataSyncAt,
+      lastScannedAt: r.lastScannedAt,
+      coverPath: r.coverPath,
+      tagCount: r.tagCount,
+    });
+  }
+  return out;
+}
+
 export function listWorkIdsMissingSeiyuu(): string[] {
   const rows = db
     .select({ id: works.id })

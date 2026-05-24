@@ -9,6 +9,7 @@ import {
   pruneTracksNotIn,
   getWorkById,
   getWorkMetadataCounts,
+  getAllWorkScanSnapshots,
 } from "./db/repository";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache } from "./db/queries";
@@ -28,7 +29,7 @@ const AUDIO_EXTS = new Set([
 const TRACK_NUM_RE = /^\s*(\d{1,3})[\.\-_\s]/;
 
 export type ScanEvent =
-  | { type: "start"; total: number; libraryRoot: string }
+  | { type: "start"; total: number; libraryRoots: string[] }
   | {
       type: "work-start";
       workId: string;
@@ -52,10 +53,20 @@ export type ScanEvent =
   | { type: "tracks-done"; workId: string; tracks: number }
   | { type: "work-done"; workId: string; title?: string; hasCover: boolean }
   | { type: "error"; workId?: string; message: string }
+  | { type: "durations-start"; total: number }
+  | {
+      type: "durations-track";
+      index: number;
+      total: number;
+      workId: string;
+      relativePath: string;
+      durationSeconds?: number;
+    }
+  | { type: "durations-done"; updated: number; errors: number }
   | { type: "done"; result: ScanResult };
 
 export interface ScanOptions {
-  libraryRoot: string;
+  libraryRoots: string[];
   coversDir: string;
   forceMetadata?: boolean;
   /** If set, only scan works whose id is in this list. */
@@ -66,6 +77,7 @@ export interface ScanOptions {
 export interface ScanResult {
   worksFound: number;
   worksNew: number;
+  worksSkipped: number;
   tracksScanned: number;
   metadataFetched: number;
   errors: string[];
@@ -128,21 +140,33 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   const result: ScanResult = {
     worksFound: 0,
     worksNew: 0,
+    worksSkipped: 0,
     tracksScanned: 0,
     metadataFetched: 0,
     errors: [],
   };
   const emit = (e: ScanEvent) => opts.onEvent?.(e);
 
-  let workFolders: Map<string, string>;
-  try {
-    workFolders = await findWorkFolders(opts.libraryRoot);
-  } catch (err) {
-    const message = `Failed to read library root: ${String(err)}`;
+  const workFolders = new Map<string, string>();
+  if (opts.libraryRoots.length === 0) {
+    const message = "No library roots configured";
     result.errors.push(message);
     emit({ type: "error", message });
     emit({ type: "done", result });
     return result;
+  }
+  for (const root of opts.libraryRoots) {
+    try {
+      const found = await findWorkFolders(root);
+      for (const [id, folder] of found) {
+        // First root that contains a work wins; later duplicates are skipped.
+        if (!workFolders.has(id)) workFolders.set(id, folder);
+      }
+    } catch (err) {
+      const message = `Failed to read library root ${root}: ${String(err)}`;
+      result.errors.push(message);
+      emit({ type: "error", message });
+    }
   }
 
   if (opts.filterIds) {
@@ -152,8 +176,40 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
 
   result.worksFound = workFolders.size;
+
+  // Quick-skip: for incremental scans (not forceMetadata, not filterIds),
+  // drop works that are already fully indexed and whose folder mtime hasn't
+  // advanced past lastScannedAt. Saves N sqlite lookups + the track walk per
+  // up-to-date work. Bypassed when forceMetadata=true.
+  const snapshots =
+    !opts.forceMetadata && !opts.filterIds
+      ? getAllWorkScanSnapshots()
+      : null;
+  if (snapshots) {
+    const toSkip: string[] = [];
+    await Promise.all(
+      Array.from(workFolders.entries()).map(async ([id, folder]) => {
+        const snap = snapshots.get(id);
+        if (!snap) return; // new work — must scan
+        if (!snap.metadataSource || !snap.lastMetadataSyncAt) return;
+        if (snap.tagCount === 0) return;
+        if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
+        if (!snap.lastScannedAt) return;
+        try {
+          const st = await fs.stat(folder);
+          if (st.mtimeMs > snap.lastScannedAt.getTime()) return;
+        } catch {
+          return;
+        }
+        toSkip.push(id);
+      }),
+    );
+    for (const id of toSkip) workFolders.delete(id);
+    result.worksSkipped = toSkip.length;
+  }
+
   const total = workFolders.size;
-  emit({ type: "start", total, libraryRoot: opts.libraryRoot });
+  emit({ type: "start", total, libraryRoots: opts.libraryRoots });
 
   let index = 0;
   for (const [workId, folder] of workFolders) {

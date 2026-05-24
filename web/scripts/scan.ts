@@ -1,12 +1,12 @@
 import { scanLibrary, type ScanEvent } from "../src/lib/scanner";
-import { LIBRARY_ROOT, COVERS_DIR } from "../src/lib/config";
+import { LIBRARY_ROOTS, COVERS_DIR } from "../src/lib/config";
 
 async function main() {
   const force = process.argv.includes("--force-metadata");
-  console.log(`Scanning ${LIBRARY_ROOT}`);
+  console.log(`Scanning ${LIBRARY_ROOTS.join(", ")}`);
   console.log(`Covers -> ${COVERS_DIR}`);
   const result = await scanLibrary({
-    libraryRoot: LIBRARY_ROOT,
+    libraryRoots: LIBRARY_ROOTS,
     coversDir: COVERS_DIR,
     forceMetadata: force,
     onEvent: (ev: ScanEvent) => {

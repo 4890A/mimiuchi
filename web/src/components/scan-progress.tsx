@@ -12,6 +12,7 @@ import type { DurationScanEvent } from "@/lib/duration-scanner";
 type ScanResult = {
   worksFound: number;
   worksNew: number;
+  worksSkipped: number;
   tracksScanned: number;
   metadataFetched: number;
   errors: string[];
@@ -78,8 +79,16 @@ export function useScanProgress(): {
         return {
           ...prev,
           total: ev.total,
-          currentStatus: `Found ${ev.total} works in library`,
-          log: pushLog(prev, `Found ${ev.total} works`),
+          currentStatus:
+            ev.total === 0
+              ? "All works already up to date"
+              : `Scanning ${ev.total} work${ev.total === 1 ? "" : "s"}`,
+          log: pushLog(
+            prev,
+            ev.total === 0
+              ? "All works up to date"
+              : `Scanning ${ev.total} works (skipping up-to-date ones)`,
+          ),
         };
       case "work-start":
         return {
@@ -150,15 +159,50 @@ export function useScanProgress(): {
           errorCount: prev.errorCount + 1,
           log: pushLog(prev, `  ! ${ev.message}`),
         };
+      case "durations-start":
+        return {
+          ...prev,
+          index: 0,
+          total: ev.total,
+          currentWorkId: undefined,
+          currentTitle: undefined,
+          currentStatus:
+            ev.total === 0
+              ? "All tracks already have durations"
+              : `Reading durations for ${ev.total} new tracks`,
+          log: pushLog(
+            prev,
+            ev.total === 0
+              ? "No new track durations to scan"
+              : `Reading durations for ${ev.total} new tracks`,
+          ),
+        };
+      case "durations-track":
+        return {
+          ...prev,
+          index: ev.index,
+          total: ev.total,
+          currentWorkId: ev.workId,
+          currentTitle: ev.relativePath,
+          currentStatus: `[${ev.index}/${ev.total}] ${ev.relativePath}`,
+        };
+      case "durations-done":
+        return {
+          ...prev,
+          log: pushLog(
+            prev,
+            `Durations: updated=${ev.updated} errors=${ev.errors}`,
+          ),
+        };
       case "done":
         return {
           ...prev,
           result: ev.result,
           finished: true,
-          currentStatus: `Done — ${ev.result.worksFound} works, ${ev.result.tracksScanned} tracks`,
+          currentStatus: `Done — ${ev.result.worksFound} works (${ev.result.worksSkipped} skipped)`,
           log: pushLog(
             prev,
-            `Done. works=${ev.result.worksFound} new=${ev.result.worksNew} tracks=${ev.result.tracksScanned} meta=${ev.result.metadataFetched} errors=${ev.result.errors.length}`,
+            `Done. works=${ev.result.worksFound} new=${ev.result.worksNew} skipped=${ev.result.worksSkipped} tracks=${ev.result.tracksScanned} meta=${ev.result.metadataFetched} errors=${ev.result.errors.length}`,
           ),
         };
       default:

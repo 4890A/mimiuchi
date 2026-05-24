@@ -1,5 +1,5 @@
 import { getSettings } from "@/lib/settings";
-import { resolveLibraryRoot, resolveCoversDir } from "@/lib/config";
+import { resolveLibraryRoots, resolveCoversDir } from "@/lib/config";
 import { listWorkIdsMissingSeiyuu } from "@/lib/db/repository";
 import { SettingsForm } from "./settings-form";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const settings = getSettings();
   const effective = {
-    libraryRoot: resolveLibraryRoot(settings.libraryRoot),
+    libraryRoots: resolveLibraryRoots(settings.libraryRoots),
     coversDir: resolveCoversDir(settings.coversDir),
   };
   const missingSeiyuuCount = listWorkIdsMissingSeiyuu().length;

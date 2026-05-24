@@ -1,5 +1,6 @@
 import { scanLibrary, type ScanEvent } from "@/lib/scanner";
-import { resolveLibraryRoot, resolveCoversDir } from "@/lib/config";
+import { scanDurations } from "@/lib/duration-scanner";
+import { resolveLibraryRoots, resolveCoversDir } from "@/lib/config";
 import { getSettings } from "@/lib/settings";
 import { listWorkIdsMissingSeiyuu } from "@/lib/db/repository";
 
@@ -10,40 +11,81 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   const settings = getSettings();
-  const libraryRoot = resolveLibraryRoot(settings.libraryRoot);
+  const libraryRoots = resolveLibraryRoots(settings.libraryRoots);
   const coversDir = resolveCoversDir(settings.coversDir);
 
   let filterIds: ReadonlySet<string> | undefined;
   let forceMetadata = force;
-  if (mode === "missing-seiyuu") {
+  const missingSeiyuu = mode === "missing-seiyuu";
+  if (missingSeiyuu) {
     filterIds = new Set(listWorkIdsMissingSeiyuu());
     forceMetadata = true;
   }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const queue: ScanEvent[] = [];
-      let flushing = false;
-      const flush = () => {
-        if (flushing) return;
-        flushing = true;
-        while (queue.length) {
-          const ev = queue.shift()!;
-          controller.enqueue(encoder.encode(JSON.stringify(ev) + "\n"));
-        }
-        flushing = false;
+      const send = (ev: ScanEvent) => {
+        controller.enqueue(encoder.encode(JSON.stringify(ev) + "\n"));
       };
       try {
+        let libraryDone: Extract<ScanEvent, { type: "done" }> | null = null;
+        const willChainDurations = !missingSeiyuu;
         await scanLibrary({
-          libraryRoot,
+          libraryRoots,
           coversDir,
           forceMetadata,
           filterIds,
           onEvent: (ev) => {
-            queue.push(ev);
-            flush();
+            // Hold the library scan's "done" until the durations phase
+            // finishes — otherwise the client marks the panel complete.
+            if (ev.type === "done" && willChainDurations) {
+              libraryDone = ev;
+              return;
+            }
+            send(ev);
           },
         });
+
+        // Follow with a durations pass for any newly-indexed tracks. Skip in
+        // missing-seiyuu mode (it doesn't add tracks). `forceAll: false` means
+        // only tracks lacking a stored duration are touched, so this is fast
+        // and idempotent on subsequent runs.
+        if (willChainDurations) {
+          await scanDurations({
+            forceAll: false,
+            onEvent: (ev) => {
+              switch (ev.type) {
+                case "start":
+                  send({ type: "durations-start", total: ev.total });
+                  break;
+                case "track-start":
+                  send({
+                    type: "durations-track",
+                    index: ev.index,
+                    total: ev.total,
+                    workId: ev.workId,
+                    relativePath: ev.relativePath,
+                  });
+                  break;
+                case "track-done":
+                  // Reported on the next track-start; emit a final per-track
+                  // event so the UI can show the duration if desired.
+                  break;
+                case "track-error":
+                  send({ type: "error", message: ev.message });
+                  break;
+                case "done":
+                  send({
+                    type: "durations-done",
+                    updated: ev.result.updated,
+                    errors: ev.result.errors,
+                  });
+                  break;
+              }
+            },
+          });
+          if (libraryDone) send(libraryDone);
+        }
       } catch (err) {
         controller.enqueue(
           encoder.encode(
@@ -51,7 +93,6 @@ export async function POST(req: Request) {
           ),
         );
       } finally {
-        flush();
         controller.close();
       }
     },
