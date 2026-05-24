@@ -1,8 +1,12 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { db } from "./db/client";
-import { likes, trackProgress } from "./db/schema";
+import { likes, trackProgress, tags, workTags, works } from "./db/schema";
+import { invalidateSearchIndex } from "./search/index-builder";
+import { invalidateFilterListCache } from "./db/queries";
 
 export async function toggleLike(trackId: number): Promise<{ liked: boolean }> {
   const existing = db.select().from(likes).where(eq(likes.trackId, trackId)).get();
@@ -14,6 +18,71 @@ export async function toggleLike(trackId: number): Promise<{ liked: boolean }> {
   db.insert(likes).values({ trackId }).run();
   revalidatePath("/liked");
   return { liked: true };
+}
+
+export async function addTagToWork(
+  workId: string,
+  tagName: string,
+): Promise<{ ok: true; tagId: number; name: string } | { ok: false; error: string }> {
+  const name = tagName.trim();
+  if (!name) return { ok: false, error: "empty" };
+  if (name.length > 80) return { ok: false, error: "too long" };
+
+  const work = db.select({ id: works.id }).from(works).where(eq(works.id, workId)).get();
+  if (!work) return { ok: false, error: "work not found" };
+
+  let tag = db.select().from(tags).where(eq(tags.name, name)).get();
+  if (!tag) {
+    const inserted = db
+      .insert(tags)
+      .values({ name })
+      .returning({ id: tags.id, name: tags.name, nameEn: tags.nameEn, category: tags.category })
+      .get();
+    tag = inserted;
+  }
+
+  const existingLink = db
+    .select()
+    .from(workTags)
+    .where(and(eq(workTags.workId, workId), eq(workTags.tagId, tag.id)))
+    .get();
+  if (!existingLink) {
+    db.insert(workTags).values({ workId, tagId: tag.id }).run();
+  }
+
+  invalidateSearchIndex();
+  invalidateFilterListCache();
+  revalidatePath(`/works/${workId}`);
+  return { ok: true, tagId: tag.id, name: tag.name };
+}
+
+/** Open the work's folder in the host machine's file manager. Only useful
+ *  when the browser and the Next.js server are on the same machine. */
+export async function revealWorkFolder(
+  workId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = db
+    .select({ folderPath: works.folderPath })
+    .from(works)
+    .where(eq(works.id, workId))
+    .get();
+  if (!row) return { ok: false, error: "work not found" };
+  if (!fs.existsSync(row.folderPath)) {
+    return { ok: false, error: "folder does not exist on host" };
+  }
+
+  try {
+    if (process.platform === "win32") {
+      spawn("explorer.exe", [row.folderPath], { detached: true }).unref();
+    } else if (process.platform === "darwin") {
+      spawn("open", [row.folderPath], { detached: true }).unref();
+    } else {
+      spawn("xdg-open", [row.folderPath], { detached: true }).unref();
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 export async function saveProgress(

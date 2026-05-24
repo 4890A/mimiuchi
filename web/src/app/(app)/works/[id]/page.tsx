@@ -4,6 +4,8 @@ import { ExternalLink, Calendar, Disc, Globe, ShieldAlert, Tag as TagIcon } from
 import { getWorkDetail } from "@/lib/db/queries";
 import { coverSrc } from "@/lib/cover";
 import { TrackList } from "@/components/track-row";
+import { AddTagButton } from "@/components/add-tag";
+import { RevealFolderButton } from "@/components/reveal-folder-button";
 
 export const dynamic = "force-dynamic";
 
@@ -108,34 +110,39 @@ export default async function WorkPage({
                 </span>
               )}
             </div>
-            {work.tags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-2">
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <TagIcon className="h-3.5 w-3.5" />
-                  ジャンル:
-                </span>
-                {work.tags.map((t) => (
-                  <Link
-                    key={t.id}
-                    href={`/?tags=${t.id}`}
-                    className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/70"
-                  >
-                    {t.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-            {work.dlsiteUrl && (
-              <a
-                href={work.dlsiteUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                View on DLsite
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <TagIcon className="h-3.5 w-3.5" />
+                ジャンル:
+              </span>
+              {work.tags.map((t) => (
+                <Link
+                  key={t.id}
+                  href={`/?tags=${t.id}`}
+                  className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/70"
+                >
+                  {t.name}
+                </Link>
+              ))}
+              <AddTagButton
+                workId={work.id}
+                existingTagNames={work.tags.map((t) => t.name)}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {work.dlsiteUrl && (
+                <a
+                  href={work.dlsiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  View on DLsite
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              <RevealFolderButton workId={work.id} />
+            </div>
             {work.description && (
               <p className="whitespace-pre-line pt-2 text-sm leading-relaxed text-muted-foreground">
                 {work.description}
