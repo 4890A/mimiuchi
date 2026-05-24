@@ -58,17 +58,43 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [volume, setVolumeState] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSavedRef = useRef<number>(0);
+  // In-session record of each track's most recent position. The page-load
+  // RSC snapshot of `track.initialPosition` becomes stale the moment the user
+  // plays anything, so when the same trackId is loaded again we prefer this.
+  const sessionPosRef = useRef<Map<number, number>>(new Map());
 
   const current = currentIndex >= 0 ? (queue[currentIndex] ?? null) : null;
 
   const loadedIdRef = useRef<number | null>(null);
+
+  function saveProgressFor(trackId: number, positionSeconds: number) {
+    sessionPosRef.current.set(trackId, positionSeconds);
+    const body = JSON.stringify({ trackId, positionSeconds });
+    void fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    });
+  }
+
   const loadAndPlay = useCallback((track: QueueTrack) => {
     const audio = audioRef.current;
     if (!audio) return;
     if (loadedIdRef.current !== track.id) {
+      // Flush the outgoing track's most recent position before swapping src,
+      // since changing src clears currentTime.
+      const priorId = loadedIdRef.current;
+      const priorPos = audio.currentTime;
+      if (priorId !== null && Number.isFinite(priorPos)) {
+        saveProgressFor(priorId, priorPos);
+      }
+      const sessionPos = sessionPosRef.current.get(track.id);
+      const startAt = sessionPos ?? track.initialPosition ?? 0;
       audio.src = audioUrl(track.id);
-      audio.currentTime = track.initialPosition ?? 0;
+      audio.currentTime = startAt;
       loadedIdRef.current = track.id;
+      lastSavedRef.current = startAt;
     }
     audio.play().catch(() => setIsPlaying(false));
   }, []);
@@ -211,20 +237,60 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [duration, currentTime]);
 
+  // Persist the *most recent* playback position. The periodic save catches
+  // long sessions; the cleanup/pause/pagehide saves ensure that scrubbing
+  // backward then leaving the track (switch, pause, navigate, close tab)
+  // doesn't leave a stale forward position in the DB.
   useEffect(() => {
     if (!current) return;
+    const trackId = current.id;
+
+    function saveNow(useBeacon = false) {
+      const t = audioRef.current?.currentTime ?? 0;
+      if (t === lastSavedRef.current) return;
+      lastSavedRef.current = t;
+      sessionPosRef.current.set(trackId, t);
+      const body = JSON.stringify({ trackId, positionSeconds: t });
+      if (useBeacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
+        try {
+          const blob = new Blob([body], { type: "application/json" });
+          navigator.sendBeacon("/api/progress", blob);
+          return;
+        } catch {}
+      }
+      void fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    }
+
     const interval = setInterval(() => {
       const t = audioRef.current?.currentTime ?? 0;
-      if (Math.abs(t - lastSavedRef.current) >= 5) {
-        lastSavedRef.current = t;
-        void fetch("/api/progress", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackId: current.id, positionSeconds: t }),
-        });
-      }
+      if (Math.abs(t - lastSavedRef.current) >= 5) saveNow();
     }, 5000);
-    return () => clearInterval(interval);
+
+    const audio = audioRef.current;
+    const onPause = () => saveNow();
+    audio?.addEventListener("pause", onPause);
+
+    const onPageHide = () => saveNow(true);
+    window.addEventListener("pagehide", onPageHide);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveNow(true);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      audio?.removeEventListener("pause", onPause);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      // Track-switch flushes already happened in loadAndPlay; only save here
+      // if the audio element still holds this trackId (e.g. provider unmount).
+      if (loadedIdRef.current === trackId) saveNow(true);
+    };
   }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo<PlayerState & PlayerActions>(
