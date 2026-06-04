@@ -425,6 +425,33 @@ export function listRecentlyPlayedWorks(limit = 8): RecentWork[] {
   }));
 }
 
+export function listRandomWorks(limit = 8): RecentWork[] {
+  const rows = db
+    .select({
+      id: works.id,
+      title: works.title,
+      circleName: circles.name,
+      coverUrl: works.coverUrl,
+      coverPath: works.coverPath,
+      nsfw: works.nsfw,
+    })
+    .from(works)
+    .leftJoin(circles, eq(works.circleId, circles.id))
+    .orderBy(sql`RANDOM()`)
+    .limit(limit)
+    .all();
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    circleName: r.circleName ?? null,
+    coverUrl: r.coverUrl ?? null,
+    hasLocalCover: Boolean(r.coverPath),
+    nsfw: r.nsfw,
+    lastPlayedAt: 0,
+  }));
+}
+
 export function listLikedTracks() {
   return db
     .select({

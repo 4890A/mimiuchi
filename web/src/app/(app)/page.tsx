@@ -8,6 +8,7 @@ import {
   listAllVoiceActors,
   listAllCircles,
   listRecentlyPlayedWorks,
+  listRandomWorks,
 } from "@/lib/db/queries";
 import {
   TagFilter,
@@ -48,6 +49,7 @@ export default async function LibraryPage({
     vaIds.length > 0 ||
     circleIds.length > 0;
   const recent = hasFilters ? [] : listRecentlyPlayedWorks(8);
+  const random = hasFilters ? [] : listRandomWorks(8);
 
   const [works, allTags, allVAs, allCircles] = await Promise.all([
     listWorksFiltered({
@@ -57,7 +59,6 @@ export default async function LibraryPage({
       circleIds,
       sort: sp.sort,
       dir: sp.dir,
-      limit: 200,
     }),
     Promise.resolve(listAllTags()),
     Promise.resolve(listAllVoiceActors()),
@@ -127,7 +128,7 @@ export default async function LibraryPage({
 
       <p className="mb-4 text-sm text-muted-foreground">{works.length} works</p>
 
-      {recent.length > 0 && <OnDeck works={recent} />}
+      {recent.length > 0 && <OnDeck works={recent} initialRandom={random} />}
 
       {works.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-muted/30 px-6 py-16 text-center">

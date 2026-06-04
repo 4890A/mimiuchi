@@ -1,13 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { History, Shuffle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { coverSrc } from "@/lib/cover";
+import { cn } from "@/lib/utils";
+import { getRandomWorks } from "@/lib/actions";
 import type { RecentWork } from "@/lib/db/queries";
 
-export function OnDeck({ works }: { works: RecentWork[] }) {
+export function OnDeck({
+  works,
+  initialRandom,
+}: {
+  works: RecentWork[];
+  initialRandom: RecentWork[];
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const [random, setRandom] = useState(initialRandom);
+  const [showRandom, setShowRandom] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -24,18 +36,57 @@ export function OnDeck({ works }: { works: RecentWork[] }) {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  function onShuffle() {
+    // Switching into random view, or re-rolling while already in it,
+    // both fetch a fresh random set.
+    startTransition(async () => {
+      const next = await getRandomWorks(8);
+      setRandom(next);
+      setShowRandom(true);
+    });
+  }
+
   if (works.length === 0) return null;
+
+  const items = showRandom ? random : works;
 
   return (
     <section className="mb-6">
-      <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        On deck
-      </h2>
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          {showRandom ? "Random" : "On deck"}
+        </h2>
+        <button
+          type="button"
+          onClick={onShuffle}
+          disabled={isPending}
+          aria-pressed={showRandom}
+          title={showRandom ? "Shuffle again" : "Show random works"}
+          className={cn(
+            "rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
+            showRandom && "text-foreground",
+          )}
+        >
+          <Shuffle className={cn("h-3.5 w-3.5", isPending && "animate-spin")} />
+          <span className="sr-only">Shuffle</span>
+        </button>
+        {showRandom && (
+          <button
+            type="button"
+            onClick={() => setShowRandom(false)}
+            title="Back to on deck"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <History className="h-3.5 w-3.5" />
+            <span className="sr-only">Back to on deck</span>
+          </button>
+        )}
+      </div>
       <div
         ref={scrollerRef}
         className="on-deck-scroller -mx-3 flex gap-3 overflow-x-auto px-3 pb-2 sm:-mx-6 sm:px-6"
       >
-        {works.map((w) => (
+        {items.map((w) => (
           <Link
             key={w.id}
             href={`/works/${w.id}`}

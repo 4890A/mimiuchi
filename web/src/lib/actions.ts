@@ -6,7 +6,11 @@ import fs from "node:fs";
 import { db } from "./db/client";
 import { likes, trackProgress, tags, workTags, works } from "./db/schema";
 import { invalidateSearchIndex } from "./search/index-builder";
-import { invalidateFilterListCache } from "./db/queries";
+import { invalidateFilterListCache, listRandomWorks, type RecentWork } from "./db/queries";
+
+export async function getRandomWorks(limit = 8): Promise<RecentWork[]> {
+  return listRandomWorks(limit);
+}
 
 export async function toggleLike(trackId: number): Promise<{ liked: boolean }> {
   const existing = db.select().from(likes).where(eq(likes.trackId, trackId)).get();
