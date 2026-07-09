@@ -60,6 +60,37 @@ export async function addTagToWork(
   return { ok: true, tagId: tag.id, name: tag.name };
 }
 
+/** Remove a work and everything attached to it (tracks, tags, voice-actor
+ *  links, likes, progress — all via FK cascade) plus its local cover file.
+ *  Does NOT touch the audio files on disk; use this for stale entries whose
+ *  folder was renamed or removed. */
+export async function deleteWork(
+  workId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = db
+    .select({ coverPath: works.coverPath })
+    .from(works)
+    .where(eq(works.id, workId))
+    .get();
+  if (!row) return { ok: false, error: "work not found" };
+
+  db.delete(works).where(eq(works.id, workId)).run();
+
+  if (row.coverPath) {
+    try {
+      fs.rmSync(row.coverPath, { force: true });
+    } catch {
+      // best-effort cover cleanup; the DB row is already gone
+    }
+  }
+
+  invalidateSearchIndex();
+  invalidateFilterListCache();
+  revalidatePath("/");
+  revalidatePath("/liked");
+  return { ok: true };
+}
+
 /** Open the work's folder in the host machine's file manager. Only useful
  *  when the browser and the Next.js server are on the same machine. */
 export async function revealWorkFolder(

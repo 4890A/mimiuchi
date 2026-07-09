@@ -6,6 +6,7 @@ import { coverSrc } from "@/lib/cover";
 import { TrackList } from "@/components/track-row";
 import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
+import { DeleteWorkButton } from "@/components/delete-work-button";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +143,7 @@ export default async function WorkPage({
                 </a>
               )}
               <RevealFolderButton workId={work.id} />
+              <DeleteWorkButton workId={work.id} workTitle={work.title} />
             </div>
             {work.description && (
               <p className="whitespace-pre-line pt-2 text-sm leading-relaxed text-muted-foreground">
