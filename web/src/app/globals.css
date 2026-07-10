@@ -153,4 +153,12 @@
   .on-deck-scroller::-webkit-scrollbar {
     display: none;
   }
+
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

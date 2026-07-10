@@ -7,6 +7,7 @@ import { TrackList } from "@/components/track-row";
 import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
+import { EditWorkDialog } from "@/components/edit-work-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +20,15 @@ export default async function WorkPage({
   const work = await Promise.resolve(getWorkDetail(id));
   if (!work) notFound();
 
-  const cover = coverSrc({
-    id: work.id,
-    coverUrl: work.coverUrl,
-    coverPath: work.coverPath,
-    hasLocalCover: Boolean(work.coverPath),
-  });
+  const cover = coverSrc(
+    {
+      id: work.id,
+      coverUrl: work.coverUrl,
+      coverPath: work.coverPath,
+      hasLocalCover: Boolean(work.coverPath),
+    },
+    work.coverVersion,
+  );
 
   return (
     <div className="relative">
@@ -142,6 +146,22 @@ export default async function WorkPage({
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
+              <EditWorkDialog
+                workId={work.id}
+                coverSrc={cover}
+                initial={{
+                  title: work.title,
+                  circleName: work.circleName,
+                  releaseDate: work.releaseDate,
+                  workType: work.workType,
+                  language: work.language,
+                  description: work.description,
+                  nsfw: work.nsfw,
+                  voiceActors: work.voiceActors.map((va) => va.name),
+                  tags: work.tags.map((t) => t.name),
+                  coverUrl: work.coverUrl,
+                }}
+              />
               <RevealFolderButton workId={work.id} />
               <DeleteWorkButton workId={work.id} workTitle={work.title} />
             </div>

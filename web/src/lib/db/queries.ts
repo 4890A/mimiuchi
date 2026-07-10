@@ -1,4 +1,5 @@
 import "server-only";
+import fs from "node:fs";
 import { eq, desc, sql, asc, inArray, and } from "drizzle-orm";
 import { db, sqlite } from "./client";
 import { searchWorkIdsForQuery } from "../search/index-builder";
@@ -236,8 +237,21 @@ export function getWorkDetail(workId: string) {
     .where(eq(workTags.workId, workId))
     .all();
 
+  // mtime of the local cover file, used as a cache-busting token so the
+  // browser refetches /api/cover after an in-app cover replacement despite
+  // the route's immutable Cache-Control.
+  let coverVersion: number | undefined;
+  if (work.coverPath) {
+    try {
+      coverVersion = Math.floor(fs.statSync(work.coverPath).mtimeMs);
+    } catch {
+      // cover file gone; fall through with no version
+    }
+  }
+
   return {
     ...work,
+    coverVersion,
     voiceActors: vas,
     tags: workTagsRows,
     tracks: trackRows.map((t) => ({
@@ -252,21 +266,16 @@ type TagRow = { id: number; name: string; nameEn: string | null; workCount: numb
 type VARow = { id: number; name: string; nameEn: string | null; workCount: number };
 type CircleRow = { id: number; name: string; nameEn: string | null; workCount: number };
 
-let tagsCache: TagRow[] | null = null;
-let vasCache: VARow[] | null = null;
-let circlesCache: CircleRow[] | null = null;
-
-/** Invalidate the cached tag/voice-actor/circle filter lists. Call after any
- *  write that adds/removes works, tags, voice actors, or circles. */
-export function invalidateFilterListCache() {
-  tagsCache = null;
-  vasCache = null;
-  circlesCache = null;
-}
+/** No-op retained for call sites. These filter lists used to be memoized in
+ *  module-level variables, but the library scan runs in an API route handler
+ *  whose module instance is separate from the RSC pages' — so invalidating the
+ *  cache there never reached the copy the /seiyuu, filter, and home pages read,
+ *  leaving them stale (empty) until a server restart. The queries below are
+ *  single indexed GROUP BYs, so we just run them fresh per request instead. */
+export function invalidateFilterListCache() {}
 
 export function listAllTags(): TagRow[] {
-  if (tagsCache) return tagsCache;
-  tagsCache = db
+  return db
     .select({
       id: tags.id,
       name: tags.name,
@@ -278,12 +287,10 @@ export function listAllTags(): TagRow[] {
     .groupBy(tags.id)
     .orderBy(desc(sql`c`))
     .all();
-  return tagsCache;
 }
 
 export function listAllVoiceActors(): VARow[] {
-  if (vasCache) return vasCache;
-  vasCache = db
+  return db
     .select({
       id: voiceActors.id,
       name: voiceActors.name,
@@ -295,12 +302,10 @@ export function listAllVoiceActors(): VARow[] {
     .groupBy(voiceActors.id)
     .orderBy(desc(sql`c`))
     .all();
-  return vasCache;
 }
 
 export function listAllCircles(): CircleRow[] {
-  if (circlesCache) return circlesCache;
-  circlesCache = db
+  return db
     .select({
       id: circles.id,
       name: circles.name,
@@ -312,7 +317,6 @@ export function listAllCircles(): CircleRow[] {
     .groupBy(circles.id)
     .orderBy(desc(sql`c`))
     .all();
-  return circlesCache;
 }
 
 export interface CircleWithRecentWorks {
