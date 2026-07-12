@@ -14,7 +14,7 @@ const MIME: Record<string, string> = {
 };
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/cover/[workId]">,
 ) {
   const { workId } = await ctx.params;
@@ -31,13 +31,28 @@ export async function GET(
     return new NextResponse(null, { status: 404 });
   }
   const ext = path.extname(row.coverPath).toLowerCase();
+
+  // Validate against the file's size + mtime so the browser refetches the
+  // moment a cover is replaced in-app. `no-cache` keeps the image cacheable
+  // but forces a (cheap, usually 304) revalidation on every load — unlike
+  // `immutable`, which would pin a stale image for the full max-age window.
+  const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+  const cacheHeaders = {
+    ETag: etag,
+    "Last-Modified": stat.mtime.toUTCString(),
+    "Cache-Control": "private, no-cache",
+  };
+  if (req.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, { status: 304, headers: cacheHeaders });
+  }
+
   return new NextResponse(
     fs.createReadStream(row.coverPath) as unknown as ReadableStream,
     {
       headers: {
+        ...cacheHeaders,
         "Content-Type": MIME[ext] ?? "image/jpeg",
         "Content-Length": String(stat.size),
-        "Cache-Control": "private, max-age=86400, immutable",
       },
     },
   );
