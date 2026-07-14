@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import fs from "node:fs";
+import { Readable } from "node:stream";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
@@ -53,7 +54,7 @@ export async function GET(
 
   if (!range) {
     const stream = fs.createReadStream(filePath);
-    return new NextResponse(stream as unknown as ReadableStream, {
+    return new NextResponse(Readable.toWeb(stream) as unknown as ReadableStream, {
       status: 200,
       headers: {
         "Content-Type": contentType,
@@ -76,7 +77,7 @@ export async function GET(
   }
   const chunkSize = end - start + 1;
   const stream = fs.createReadStream(filePath, { start, end });
-  return new NextResponse(stream as unknown as ReadableStream, {
+  return new NextResponse(Readable.toWeb(stream) as unknown as ReadableStream, {
     status: 206,
     headers: {
       "Content-Type": contentType,
