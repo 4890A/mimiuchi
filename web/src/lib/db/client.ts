@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 import * as schema from "./schema";
+import { runMigrations } from "./migrate";
 
 const dataDir = process.env.KIKOERU_DATA_DIR
   ? path.resolve(process.env.KIKOERU_DATA_DIR)
@@ -26,6 +27,9 @@ const sqlite =
     conn.pragma("journal_mode = WAL");
     conn.pragma("foreign_keys = ON");
     conn.pragma("synchronous = NORMAL");
+    // Bring an empty/fresh database up to the current schema on first
+    // connection so queries don't fail with `no such table`.
+    runMigrations(conn, drizzle(conn, { schema }));
     return conn;
   })();
 

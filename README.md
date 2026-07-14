@@ -41,9 +41,13 @@ Edit `web/.env.local` and set the variables below.
 All commands run from the `web/` directory.
 
 ```bash
-pnpm db:push        # create / migrate the SQLite schema
 pnpm dev            # start the dev server on http://localhost:3000
 ```
+
+The SQLite schema is created and migrated automatically on first connection —
+a fresh checkout provisions an empty database on startup, so there's no manual
+migration step. (Existing databases from before automatic migrations are
+detected and left untouched.)
 
 On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from the in-app **Scan** button — it walks `KIKOERU_LIBRARY_ROOT`, fetches metadata, and streams progress to a panel in the bottom-right. Re-run whenever you add new works.
 
@@ -54,7 +58,8 @@ On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from
 - `pnpm build` / `pnpm start` — production build & serve
 - `pnpm lint` — ESLint
 - `pnpm db:studio` — open Drizzle Studio against the SQLite db
-- `pnpm db:generate` — generate a migration from schema changes
+- `pnpm db:generate` — after editing `schema.ts`, generate a migration into `web/drizzle/` and commit it; it's applied automatically on the next start
+- `pnpm db:push` — push the schema to the db directly without a migration (handy for quick local iteration)
 
 ## Project layout
 
