@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useScanProgress } from "@/components/scan-progress";
+import { PlayerSettings } from "./player-settings";
 
 interface Settings {
   dlsiteProxyUrl: string;
@@ -114,6 +115,9 @@ export function SettingsForm({
 
   return (
     <div className="space-y-6">
+      {/* Player */}
+      <PlayerSettings />
+
       {/* Proxy */}
       <Card>
         <CardHeader>

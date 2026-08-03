@@ -9,6 +9,7 @@ import {
   workVoiceActors,
   workTags,
   tracks,
+  trackWaveforms,
   type NewWork,
   type NewTrack,
 } from "./schema";
@@ -225,6 +226,49 @@ export function listAllTracksForDuration(): Array<{
 
 export function setTrackDuration(id: number, durationSeconds: number): void {
   db.update(tracks).set({ durationSeconds }).where(eq(tracks.id, id)).run();
+}
+
+export function getTrackSourceFile(
+  id: number,
+): { folderPath: string; relativePath: string } | undefined {
+  return db
+    .select({
+      folderPath: works.folderPath,
+      relativePath: tracks.relativePath,
+    })
+    .from(tracks)
+    .innerJoin(works, eq(works.id, tracks.workId))
+    .where(eq(tracks.id, id))
+    .get();
+}
+
+export function getTrackWaveform(
+  trackId: number,
+): { version: number; buckets: number; peaks: Buffer } | undefined {
+  return db
+    .select({
+      version: trackWaveforms.version,
+      buckets: trackWaveforms.buckets,
+      peaks: trackWaveforms.peaks,
+    })
+    .from(trackWaveforms)
+    .where(eq(trackWaveforms.trackId, trackId))
+    .get();
+}
+
+export function setTrackWaveform(
+  trackId: number,
+  version: number,
+  buckets: number,
+  peaks: Buffer,
+): void {
+  db.insert(trackWaveforms)
+    .values({ trackId, version, buckets, peaks, createdAt: new Date() })
+    .onConflictDoUpdate({
+      target: trackWaveforms.trackId,
+      set: { version, buckets, peaks, createdAt: new Date() },
+    })
+    .run();
 }
 
 export function pruneTracksNotIn(

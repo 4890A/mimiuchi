@@ -8,6 +8,13 @@
       "when": 1783995994013,
       "tag": "0000_freezing_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785201647523,
+      "tag": "0001_curious_power_man",
+      "breakpoints": true
     }
   ]
 }

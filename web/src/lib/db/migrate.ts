@@ -66,16 +66,20 @@ function baselineLegacyDatabase(sqlite: Database.Database): void {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as {
     entries?: { when: number }[];
   };
-  const latestWhen = (journal.entries ?? []).reduce(
-    (max, entry) => Math.max(max, entry.when),
-    0,
-  );
+  // Baseline at 0000 — the snapshot migration that describes the schema these
+  // legacy databases already have. Baselining at the *latest* entry instead
+  // would silently mark every later migration as applied, so a legacy database
+  // opened for the first time after a new migration landed would never get it.
+  const baselineWhen = (journal.entries ?? [])[0]?.when;
+  if (baselineWhen === undefined) {
+    return;
+  }
 
   // created_at == a migration's timestamp counts as "already applied", so the
-  // migrator skips every existing migration and runs only future ones.
+  // migrator skips 0000 and runs every migration added after it.
   sqlite
     .prepare(
       'INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?)',
     )
-    .run("baseline", latestWhen);
+    .run("baseline", baselineWhen);
 }

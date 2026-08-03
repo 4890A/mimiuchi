@@ -4,6 +4,7 @@ import {
   text,
   integer,
   real,
+  blob,
   primaryKey,
   index,
   uniqueIndex,
@@ -138,6 +139,25 @@ export const trackProgress = sqliteTable("track_progress", {
   positionSeconds: real("position_seconds").notNull(),
   completed: integer("completed", { mode: "boolean" }).notNull().default(false),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
+/**
+ * Cached loudness envelope for a track, used by the waveform seek bar.
+ *
+ * `peaks` is one unsigned byte per bucket (sqrt-companded RMS, see
+ * lib/waveform.ts). `version` lets a future change to the extraction
+ * parameters invalidate rows without a migration.
+ */
+export const trackWaveforms = sqliteTable("track_waveforms", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  buckets: integer("buckets").notNull(),
+  peaks: blob("peaks", { mode: "buffer" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
 });

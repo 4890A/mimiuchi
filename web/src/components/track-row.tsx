@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronsDownUp,
@@ -11,6 +11,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
 import { usePlayer, type QueueTrack } from "@/components/player/player-store";
+import {
+  ensureBookmarksLoaded,
+  useBookmarkMap,
+} from "@/components/player/bookmark-store";
 import { cn } from "@/lib/utils";
 
 interface Track {
@@ -83,6 +87,34 @@ export function TrackList({
   coverSrc: string;
 }) {
   const p = usePlayer();
+  const bookmarkMap = useBookmarkMap();
+
+  const trackIds = useMemo(() => tracks.map((t) => t.id), [tracks]);
+  useEffect(() => {
+    ensureBookmarksLoaded(trackIds);
+  }, [trackIds]);
+
+  // `track.progress` is the snapshot taken when the page rendered, so once the
+  // user has played something it is stale. Remember where each track actually
+  // got to this session, otherwise a row snaps back to its page-load position
+  // the moment playback moves on to the next track.
+  const [sessionPositions, setSessionPositions] = useState<Map<number, number>>(
+    () => new Map(),
+  );
+  const latestTimeRef = useRef(0);
+  useEffect(() => {
+    latestTimeRef.current = p.currentTime;
+  }, [p.currentTime]);
+
+  const currentId = p.current?.id;
+  useEffect(() => {
+    if (currentId === undefined) return;
+    // On the way out, bank the position this track reached.
+    return () => {
+      const reached = latestTimeRef.current;
+      setSessionPositions((prev) => new Map(prev).set(currentId, reached));
+    };
+  }, [currentId]);
 
   const groups = useMemo(() => groupTracks(tracks), [tracks]);
   // Suppress grouping UI when there's a single homogeneous group — keeps the
@@ -122,10 +154,26 @@ export function TrackList({
   function renderTrack(t: TrackWithProgress, queueIndex: number, displayNumber: number) {
     const isCurrent = p.current?.id === t.id;
     const playingThis = isCurrent && p.isPlaying;
+
+    // Live for the playing track, last-known for anything played this session,
+    // page-load snapshot otherwise.
+    const duration =
+      (isCurrent ? p.duration || t.durationSeconds : t.durationSeconds) ?? 0;
+    const position = isCurrent
+      ? p.currentTime
+      : (sessionPositions.get(t.id) ?? t.progress?.positionSeconds ?? 0);
     const progressPct =
-      t.progress?.positionSeconds && t.durationSeconds
-        ? Math.min(100, (t.progress.positionSeconds / t.durationSeconds) * 100)
-        : 0;
+      duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
+
+    const bookmarks = bookmarkMap.get(t.id) ?? [];
+    // Keep the bar mounted for the current track so it doesn't pop in mid-play,
+    // and show it whenever there are bookmarks to place on it.
+    const showBar =
+      duration > 0 &&
+      (isCurrent ||
+        bookmarks.length > 0 ||
+        (progressPct > 0 && !t.progress?.completed));
+
     return (
       <li
         key={t.id}
@@ -162,12 +210,22 @@ export function TrackList({
           >
             {t.title}
           </p>
-          {progressPct > 0 && !t.progress?.completed && (
-            <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary/60"
-                style={{ width: `${progressPct}%` }}
-              />
+          {showBar && (
+            // Taller than the rail so bookmark ticks stand proud of it.
+            <div className="relative mt-1 h-1.5 w-full">
+              <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary/60"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              {bookmarks.map((b) => (
+                <div
+                  key={b}
+                  className="absolute inset-y-0 w-[2px] -translate-x-1/2 rounded-full bg-amber-400"
+                  style={{ left: `${Math.min(100, (b / duration) * 100)}%` }}
+                />
+              ))}
             </div>
           )}
         </div>

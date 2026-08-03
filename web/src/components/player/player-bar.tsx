@@ -10,7 +10,11 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatTime } from "@/lib/utils";
 import { usePlayer } from "./player-store";
+import { usePlayerPrefs } from "./player-prefs";
+import { WaveformSeekbar } from "./waveform-seekbar";
+import { prefetchWaveform } from "./waveform-data";
 
 function TopSeekbar({
   current,
@@ -210,20 +214,25 @@ function VolumeControl({
   );
 }
 
-function formatTime(s: number) {
-  if (!Number.isFinite(s) || s < 0) return "0:00";
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
-}
-
 export function PlayerBar() {
   const p = usePlayer();
+  const { seekbarStyle } = usePlayerPrefs();
   const audioElRef = useRef<HTMLAudioElement | null>(null);
+
+  const waveformView = seekbarStyle === "waveform";
 
   useEffect(() => {
     p.audioRef.current = audioElRef.current;
   }, [p.audioRef]);
+
+  // Warm the next queue entry so skipping forward doesn't wait on a decode.
+  // Delayed so it doesn't compete with the current track's own request.
+  const nextTrackId = p.queue[p.currentIndex + 1]?.id;
+  useEffect(() => {
+    if (!waveformView || nextTrackId === undefined) return;
+    const timer = setTimeout(() => prefetchWaveform(nextTrackId), 3000);
+    return () => clearTimeout(timer);
+  }, [waveformView, nextTrackId]);
 
   if (!p.current) {
     return <audio ref={audioElRef} preload="metadata" />;
@@ -244,7 +253,17 @@ export function PlayerBar() {
         onEnded={() => p.next()}
       />
       <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-        <TopSeekbar current={t} duration={d} onSeek={(s) => p.seek(s)} />
+        {waveformView ? (
+          <WaveformSeekbar
+            key={p.current.id}
+            trackId={p.current.id}
+            current={t}
+            duration={d}
+            onSeek={(s) => p.seek(s)}
+          />
+        ) : (
+          <TopSeekbar current={t} duration={d} onSeek={(s) => p.seek(s)} />
+        )}
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:gap-4 sm:px-6 sm:py-3 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Link
             href={`/works/${p.current.workId}`}
