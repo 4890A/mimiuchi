@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
 import { usePlayer, type QueueTrack } from "@/components/player/player-store";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 
 interface LikedTrack {
   id: number;
@@ -25,6 +26,8 @@ function formatDuration(s: number | null) {
 
 export function LikedTrackList({ tracks }: { tracks: LikedTrack[] }) {
   const p = usePlayer();
+  // Rows bind `t` to a track below, so the translator takes a name.
+  const { t: translate } = useTranslations();
   const queue: QueueTrack[] = tracks.map((t) => ({
     id: t.id,
     title: t.title,
@@ -86,7 +89,9 @@ export function LikedTrackList({ tracks }: { tracks: LikedTrack[] }) {
                 if (isCurrent) p.togglePlay();
                 else p.playQueue(queue, i);
               }}
-              aria-label={playingThis ? "Pause" : "Play"}
+              aria-label={
+                playingThis ? translate("track.pause") : translate("track.play")
+              }
             >
               {playingThis ? (
                 <Pause className="h-5 w-5" />

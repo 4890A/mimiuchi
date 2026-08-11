@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn, formatTime } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 import {
   getCachedWaveform,
   isWaveformUnavailable,
@@ -129,6 +130,7 @@ export function WaveformSeekbar({
   duration: number;
   onSeek: (s: number) => void;
 }) {
+  const { t } = useTranslations();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
@@ -278,8 +280,11 @@ export function WaveformSeekbar({
       aria-valuemin={0}
       aria-valuemax={duration || 1}
       aria-valuenow={value}
-      aria-valuetext={`${formatTime(value)} of ${formatTime(duration)}`}
-      aria-label="Seek"
+      aria-valuetext={t("player.seekPosition", {
+        current: formatTime(value),
+        total: formatTime(duration),
+      })}
+      aria-label={t("player.seek")}
       tabIndex={0}
     >
       {/* Unplayed */}

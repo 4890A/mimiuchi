@@ -19,6 +19,7 @@ import {
 } from "./_filters";
 import { LibraryGridSize } from "./_library-grid";
 import { OnDeck } from "@/components/on-deck";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function LibraryPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
+  const { t } = await getTranslations();
   const parseIds = (v?: string) =>
     v?.split(",").map((s) => parseInt(s, 10)).filter(Number.isFinite) ?? [];
   const tagIds = parseIds(sp.tags);
@@ -69,7 +71,7 @@ export default async function LibraryPage({
     <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h1 className="whitespace-nowrap text-2xl font-semibold tracking-tight">
-          Library
+          {t("library.title")}
         </h1>
         <div className="flex items-center gap-2">
           <SortPicker current={sp.sort ?? "added"} dir={sp.dir} />
@@ -78,7 +80,7 @@ export default async function LibraryPage({
               render={<Button variant="outline" size="sm" className="gap-1.5" />}
             >
               <Filter className="h-4 w-4" />
-              Filters
+              {t("library.filters")}
               {(tagIds.length > 0 ||
                 vaIds.length > 0 ||
                 circleIds.length > 0) && (
@@ -89,22 +91,28 @@ export default async function LibraryPage({
             </SheetTrigger>
             <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
               <SheetHeader>
-                <SheetTitle>Filters</SheetTitle>
+                <SheetTitle>{t("library.filters")}</SheetTitle>
               </SheetHeader>
               <div className="space-y-6 p-4">
                 <section>
-                  <h3 className="mb-2 text-sm font-medium">Voice actors / 声優</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("library.filter.voiceActors")}
+                  </h3>
                   <VoiceActorFilter
                     items={allVAs}
                     selected={vaIds}
                   />
                 </section>
                 <section>
-                  <h3 className="mb-2 text-sm font-medium">Circles / サークル</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("library.filter.circles")}
+                  </h3>
                   <CircleFilter items={allCircles} selected={circleIds} />
                 </section>
                 <section>
-                  <h3 className="mb-2 text-sm font-medium">Tags / ジャンル</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("library.filter.tags")}
+                  </h3>
                   <TagFilter items={allTags} selected={tagIds} />
                 </section>
               </div>
@@ -126,15 +134,19 @@ export default async function LibraryPage({
           .map((c) => ({ id: c.id, name: c.name }))}
       />
 
-      <p className="mb-4 text-sm text-muted-foreground">{works.length} works</p>
+      <p className="mb-4 text-sm text-muted-foreground">
+        {t("library.workCount", { count: works.length })}
+      </p>
 
       {recent.length > 0 && <OnDeck works={recent} initialRandom={random} />}
 
       {works.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-muted/30 px-6 py-16 text-center">
-          <p className="text-lg font-medium">No works yet</p>
+          <p className="text-lg font-medium">{t("library.empty.title")}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Drop folders named like <code className="rounded bg-muted px-1.5 py-0.5">RJ123456</code> into your library directory, then click the refresh button in the top bar to scan.
+            {t("library.empty.before")}
+            <code className="rounded bg-muted px-1.5 py-0.5">RJ123456</code>
+            {t("library.empty.after")}
           </p>
         </div>
       ) : (

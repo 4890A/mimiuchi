@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ArrowUpDown, ArrowDown, ArrowUp, X } from "lucide-react";
+import { useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 
 interface FilterItem {
   id: number;
@@ -87,6 +89,7 @@ function FilterList({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const { t } = useTranslations();
   const [q, setQ] = useState("");
   const [fuzzyIds, setFuzzyIds] = useState<number[] | null>(null);
 
@@ -153,7 +156,7 @@ function FilterList({
   return (
     <div>
       <Input
-        placeholder="Search…"
+        placeholder={t("common.searchPlaceholder")}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         className="mb-2"
@@ -189,7 +192,7 @@ function FilterList({
         })}
         {filtered.length === 0 && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            No matches
+            {t("common.noMatches")}
           </p>
         )}
       </div>
@@ -215,6 +218,7 @@ export function ActiveFilters({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const { t } = useTranslations();
 
   const circleList = circles ?? [];
   if (
@@ -293,7 +297,7 @@ export function ActiveFilters({
         onClick={clearAll}
         className="ml-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
       >
-        Clear all
+        {t("filters.clearAll")}
       </button>
     </div>
   );
@@ -308,6 +312,7 @@ function FilterChip({
   onRemove: () => void;
   tone?: "tag" | "va" | "circle";
 }) {
+  const { t } = useTranslations();
   return (
     <span
       className={cn(
@@ -321,7 +326,7 @@ function FilterChip({
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Remove ${label}`}
+        aria-label={t("filters.remove", { name: label })}
         className="-mr-1 rounded-full p-0.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
       >
         <X className="h-3 w-3" />
@@ -339,10 +344,11 @@ export function SortPicker({
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const labels: Record<string, string> = {
-    added: "Recently added",
-    release: "Release date",
-    title: "Title",
+  const { t } = useTranslations();
+  const labelKeys: Record<string, TranslationKey> = {
+    added: "sort.added",
+    release: "sort.release",
+    title: "sort.title",
   };
   const defaultDir: "asc" | "desc" = current === "title" ? "asc" : "desc";
   const effectiveDir = dir ?? defaultDir;
@@ -363,10 +369,10 @@ export function SortPicker({
           render={<Button variant="outline" size="sm" className="gap-1.5" />}
         >
           <ArrowUpDown className="h-4 w-4" />
-          {labels[current] ?? "Sort"}
+          {labelKeys[current] ? t(labelKeys[current]) : t("sort.label")}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {Object.entries(labels).map(([k, v]) => (
+          {Object.entries(labelKeys).map(([k, labelKey]) => (
             <DropdownMenuItem
               key={k}
               onClick={() => {
@@ -377,7 +383,7 @@ export function SortPicker({
                 router.push(`/?${next.toString()}`);
               }}
             >
-              {v}
+              {t(labelKey)}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -386,15 +392,15 @@ export function SortPicker({
         variant="outline"
         size="sm"
         onClick={toggleDir}
-        aria-label={reversed ? "Reverse: on" : "Reverse: off"}
+        aria-label={reversed ? t("sort.reverseOn") : t("sort.reverseOff")}
         title={
           effectiveDir === "asc"
             ? current === "title"
-              ? "A → Z"
-              : "Oldest first"
+              ? t("sort.aToZ")
+              : t("sort.oldestFirst")
             : current === "title"
-              ? "Z → A"
-              : "Newest first"
+              ? t("sort.zToA")
+              : t("sort.newestFirst")
         }
         className={cn("px-2", reversed && "border-primary/50 text-primary")}
       >

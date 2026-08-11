@@ -8,6 +8,7 @@ import { NsfwBlurToggle } from "@/components/nsfw-blur-toggle";
 import { SearchBar } from "@/components/search-bar";
 import { cn } from "@/lib/utils";
 import { useScanProgress } from "@/components/scan-progress";
+import { useTranslations } from "@/lib/i18n/client";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -19,6 +20,7 @@ import {
 export function TopNav() {
   const pathname = usePathname();
   const scan = useScanProgress();
+  const { t } = useTranslations();
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
@@ -30,16 +32,16 @@ export function TopNav() {
         </Link>
         <nav className="hidden items-center gap-1 sm:flex">
           <NavLink href="/" active={pathname === "/"} icon={<Library className="h-4 w-4" />}>
-            Library
+            {t("nav.library")}
           </NavLink>
           <NavLink href="/liked" active={pathname === "/liked"} icon={<Heart className="h-4 w-4" />}>
-            Liked
+            {t("nav.liked")}
           </NavLink>
           <NavLink href="/seiyuu" active={pathname.startsWith("/seiyuu")} icon={<Mic2 className="h-4 w-4" />}>
-            Seiyuu
+            {t("nav.seiyuu")}
           </NavLink>
           <NavLink href="/circles" active={pathname.startsWith("/circles")} icon={<Users className="h-4 w-4" />}>
-            Circles
+            {t("nav.circles")}
           </NavLink>
         </nav>
         <SearchBar />
@@ -50,8 +52,8 @@ export function TopNav() {
                 variant="ghost"
                 size="icon"
                 disabled={scan.busy}
-                aria-label="Scan library"
-                title="Scan library"
+                aria-label={t("header.scanLibrary")}
+                title={t("header.scanLibrary")}
               />
             }
           >
@@ -63,8 +65,10 @@ export function TopNav() {
               className="whitespace-nowrap"
             >
               <RefreshCw className="h-4 w-4" />
-              Scan library
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">incremental</span>
+              {t("header.scanLibrary")}
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                {t("header.scanIncremental")}
+              </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -72,8 +76,10 @@ export function TopNav() {
               className="whitespace-nowrap"
             >
               <RotateCw className="h-4 w-4" />
-              Force full rescan
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">re-fetch all metadata</span>
+              {t("header.forceRescan")}
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                {t("header.forceRescanHint")}
+              </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -81,23 +87,27 @@ export function TopNav() {
               className="whitespace-nowrap"
             >
               <Timer className="h-4 w-4" />
-              Scan track durations
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">missing only</span>
+              {t("header.scanDurations")}
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                {t("header.scanDurationsHint")}
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => scan.start({ kind: "durations", all: true })}
               className="whitespace-nowrap"
             >
               <Timer className="h-4 w-4" />
-              Re-scan all durations
-              <span className="ml-auto pl-4 text-xs text-muted-foreground">every track</span>
+              {t("header.rescanDurations")}
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                {t("header.rescanDurationsHint")}
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <Link
           href="/settings"
-          aria-label="Settings"
-          title="Settings"
+          aria-label={t("nav.settings")}
+          title={t("nav.settings")}
           className={cn(
             "inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
             pathname.startsWith("/settings")
@@ -113,16 +123,16 @@ export function TopNav() {
       {scan.panel}
       <nav className="flex items-center gap-1 border-t px-3 py-1.5 sm:hidden">
         <NavLink href="/" active={pathname === "/"} icon={<Library className="h-4 w-4" />} compact>
-          Library
+          {t("nav.library")}
         </NavLink>
         <NavLink href="/liked" active={pathname === "/liked"} icon={<Heart className="h-4 w-4" />} compact>
-          Liked
+          {t("nav.liked")}
         </NavLink>
         <NavLink href="/seiyuu" active={pathname.startsWith("/seiyuu")} icon={<Mic2 className="h-4 w-4" />} compact>
-          Seiyuu
+          {t("nav.seiyuu")}
         </NavLink>
         <NavLink href="/circles" active={pathname.startsWith("/circles")} icon={<Users className="h-4 w-4" />} compact>
-          Circles
+          {t("nav.circles")}
         </NavLink>
       </nav>
     </header>

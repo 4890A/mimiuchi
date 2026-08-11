@@ -8,6 +8,7 @@ import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
 import { EditWorkDialog } from "@/components/edit-work-dialog";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function WorkPage({
   const { id } = await params;
   const work = await Promise.resolve(getWorkDetail(id));
   if (!work) notFound();
+  const { t } = await getTranslations();
 
   const cover = coverSrc(
     {
@@ -62,7 +64,7 @@ export default async function WorkPage({
             </div>
             {work.circleName && (
               <p className="text-sm">
-                <span className="text-muted-foreground">Circle / サークル:</span>{" "}
+                <span className="text-muted-foreground">{t("work.circle")}:</span>{" "}
                 {work.circleId ? (
                   <Link
                     href={`/?circles=${work.circleId}`}
@@ -77,7 +79,9 @@ export default async function WorkPage({
             )}
             {work.voiceActors.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">声優:</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("work.voiceActors")}:
+                </span>
                 {work.voiceActors.map((va) => (
                   <Link
                     key={va.id}
@@ -118,7 +122,7 @@ export default async function WorkPage({
             <div className="flex flex-wrap items-center gap-1.5 pt-2">
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <TagIcon className="h-3.5 w-3.5" />
-                ジャンル:
+                {t("work.tags")}:
               </span>
               {work.tags.map((t) => (
                 <Link
@@ -142,7 +146,7 @@ export default async function WorkPage({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  View on DLsite
+                  {t("work.viewOnDlsite")}
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
@@ -175,14 +179,14 @@ export default async function WorkPage({
 
         <section className="mt-8">
           <h2 className="mb-3 text-lg font-semibold">
-            Tracks
+            {t("work.tracks")}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               {work.tracks.length}
             </span>
           </h2>
           {work.tracks.length === 0 ? (
             <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-              No audio files found in this work&apos;s folder.
+              {t("work.noTracks")}
             </div>
           ) : (
             <TrackList

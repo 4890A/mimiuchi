@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
+import type { TFunction } from "@/lib/i18n/translate";
 import type { ScanEvent } from "@/lib/scanner";
 import type { DurationScanEvent } from "@/lib/duration-scanner";
 
@@ -32,15 +34,17 @@ interface ScanProgressState {
   finished: boolean;
 }
 
-const INITIAL_STATE: ScanProgressState = {
-  total: 0,
-  index: 0,
-  currentStatus: "Preparing…",
-  lastCoverVersion: 0,
-  log: [],
-  errorCount: 0,
-  finished: false,
-};
+function initialState(t: TFunction): ScanProgressState {
+  return {
+    total: 0,
+    index: 0,
+    currentStatus: t("scan.status.preparing"),
+    lastCoverVersion: 0,
+    log: [],
+    errorCount: 0,
+    finished: false,
+  };
+}
 
 export type ScanMode =
   | { kind: "library"; force?: boolean; missingSeiyuu?: boolean }
@@ -57,10 +61,11 @@ export function useScanProgress(): {
   panel: React.ReactNode;
 } {
   const router = useRouter();
+  const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [state, setState] = useState<ScanProgressState>(INITIAL_STATE);
+  const [state, setState] = useState<ScanProgressState>(() => initialState(t));
   const [mounted, setMounted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -81,13 +86,13 @@ export function useScanProgress(): {
           total: ev.total,
           currentStatus:
             ev.total === 0
-              ? "All works already up to date"
-              : `Scanning ${ev.total} work${ev.total === 1 ? "" : "s"}`,
+              ? t("scan.status.allUpToDate")
+              : t("scan.status.scanningWorks", { count: ev.total }),
           log: pushLog(
             prev,
             ev.total === 0
-              ? "All works up to date"
-              : `Scanning ${ev.total} works (skipping up-to-date ones)`,
+              ? t("scan.log.allUpToDate")
+              : t("scan.log.scanningWorks", { count: ev.total }),
           ),
         };
       case "work-start":
@@ -98,18 +103,18 @@ export function useScanProgress(): {
           currentWorkId: ev.workId,
           currentTitle: undefined,
           currentStatus: ev.hadExisting
-            ? `Checking ${ev.workId}`
-            : `New work ${ev.workId}`,
+            ? t("scan.status.checking", { id: ev.workId })
+            : t("scan.status.newWork", { id: ev.workId }),
           log: pushLog(
             prev,
-            `[${ev.index}/${ev.total}] ${ev.workId}${ev.hadExisting ? "" : " (new)"}`,
+            `[${ev.index}/${ev.total}] ${ev.workId}${ev.hadExisting ? "" : t("scan.log.newSuffix")}`,
           ),
         };
       case "fetch-meta":
         return {
           ...prev,
-          currentStatus: `Fetching metadata for ${ev.workId}…`,
-          log: pushLog(prev, `  → fetching metadata`),
+          currentStatus: t("scan.status.fetchingMeta", { id: ev.workId }),
+          log: pushLog(prev, t("scan.log.fetchingMeta")),
         };
       case "meta-result":
         return {
@@ -117,39 +122,42 @@ export function useScanProgress(): {
           currentTitle: ev.title ?? prev.currentTitle,
           currentStatus: ev.found
             ? `${ev.source ?? "metadata"}: ${ev.title ?? ev.workId}`
-            : `No metadata found for ${ev.workId}`,
+            : t("scan.status.noMeta", { id: ev.workId }),
           log: pushLog(
             prev,
             ev.found
               ? `  ✓ ${ev.source} — ${ev.title ?? ""}`
-              : `  ✗ no metadata`,
+              : t("scan.log.noMeta"),
           ),
         };
       case "fetch-cover":
         return {
           ...prev,
-          currentStatus: `Downloading cover for ${ev.workId}…`,
-          log: pushLog(prev, `  → cover ${ev.url}`),
+          currentStatus: t("scan.status.downloadingCover", { id: ev.workId }),
+          log: pushLog(prev, t("scan.log.cover", { url: ev.url })),
         };
       case "cover-saved":
         return {
           ...prev,
           lastCoverWorkId: ev.workId,
           lastCoverVersion: prev.lastCoverVersion + 1,
-          currentStatus: `Saved cover for ${ev.workId}`,
-          log: pushLog(prev, `  ✓ cover saved`),
+          currentStatus: t("scan.status.coverSaved", { id: ev.workId }),
+          log: pushLog(prev, t("scan.log.coverSaved")),
         };
       case "meta-skipped":
         return {
           ...prev,
-          currentStatus: `${ev.workId}: metadata up to date`,
-          log: pushLog(prev, `  • metadata up to date`),
+          currentStatus: t("scan.status.metaUpToDate", { id: ev.workId }),
+          log: pushLog(prev, t("scan.log.metaUpToDate")),
         };
       case "tracks-done":
         return {
           ...prev,
-          currentStatus: `${ev.workId}: ${ev.tracks} tracks indexed`,
-          log: pushLog(prev, `  • ${ev.tracks} tracks`),
+          currentStatus: t("scan.status.tracksIndexed", {
+            id: ev.workId,
+            count: ev.tracks,
+          }),
+          log: pushLog(prev, t("scan.log.tracks", { count: ev.tracks })),
         };
       case "work-done":
         return prev;
@@ -168,13 +176,13 @@ export function useScanProgress(): {
           currentTitle: undefined,
           currentStatus:
             ev.total === 0
-              ? "All tracks already have durations"
-              : `Reading durations for ${ev.total} new tracks`,
+              ? t("scan.status.allDurations")
+              : t("scan.status.readingNewDurations", { count: ev.total }),
           log: pushLog(
             prev,
             ev.total === 0
-              ? "No new track durations to scan"
-              : `Reading durations for ${ev.total} new tracks`,
+              ? t("scan.log.noNewDurations")
+              : t("scan.log.readingNewDurations", { count: ev.total }),
           ),
         };
       case "durations-track":
@@ -191,7 +199,10 @@ export function useScanProgress(): {
           ...prev,
           log: pushLog(
             prev,
-            `Durations: updated=${ev.updated} errors=${ev.errors}`,
+            t("scan.log.durationsSummary", {
+              updated: ev.updated,
+              errors: ev.errors,
+            }),
           ),
         };
       case "done":
@@ -199,10 +210,20 @@ export function useScanProgress(): {
           ...prev,
           result: ev.result,
           finished: true,
-          currentStatus: `Done — ${ev.result.worksFound} works (${ev.result.worksSkipped} skipped)`,
+          currentStatus: t("scan.status.doneWorks", {
+            found: ev.result.worksFound,
+            skipped: ev.result.worksSkipped,
+          }),
           log: pushLog(
             prev,
-            `Done. works=${ev.result.worksFound} new=${ev.result.worksNew} skipped=${ev.result.worksSkipped} tracks=${ev.result.tracksScanned} meta=${ev.result.metadataFetched} errors=${ev.result.errors.length}`,
+            t("scan.log.doneWorks", {
+              found: ev.result.worksFound,
+              added: ev.result.worksNew,
+              skipped: ev.result.worksSkipped,
+              tracks: ev.result.tracksScanned,
+              meta: ev.result.metadataFetched,
+              errors: ev.result.errors.length,
+            }),
           ),
         };
       default:
@@ -221,13 +242,13 @@ export function useScanProgress(): {
           total: ev.total,
           currentStatus:
             ev.total === 0
-              ? "All tracks already have durations"
-              : `Reading durations for ${ev.total} tracks`,
+              ? t("scan.status.allDurations")
+              : t("scan.status.readingDurations", { count: ev.total }),
           log: pushLog(
             prev,
             ev.total === 0
-              ? "No tracks need duration scan"
-              : `Reading durations for ${ev.total} tracks`,
+              ? t("scan.log.noDurations")
+              : t("scan.log.readingDurations", { count: ev.total }),
           ),
         };
       case "track-start":
@@ -259,10 +280,17 @@ export function useScanProgress(): {
         return {
           ...prev,
           finished: true,
-          currentStatus: `Done — ${ev.result.updated} updated, ${ev.result.errors} errors`,
+          currentStatus: t("scan.status.doneDurations", {
+            updated: ev.result.updated,
+            errors: ev.result.errors,
+          }),
           log: pushLog(
             prev,
-            `Done. scanned=${ev.result.scanned} updated=${ev.result.updated} errors=${ev.result.errors}`,
+            t("scan.log.doneDurations", {
+              scanned: ev.result.scanned,
+              updated: ev.result.updated,
+              errors: ev.result.errors,
+            }),
           ),
         };
       default:
@@ -281,20 +309,20 @@ export function useScanProgress(): {
     if (mode.kind === "durations") {
       url = mode.all ? "/api/scan/durations?all=1" : "/api/scan/durations";
       startMsg = mode.all
-        ? "Reading durations for all tracks…"
-        : "Reading missing track durations…";
+        ? t("scan.start.durationsAll")
+        : t("scan.start.durationsMissing");
     } else if (mode.missingSeiyuu) {
       url = "/api/scan?mode=missing-seiyuu";
-      startMsg = "Re-scanning works missing seiyuu…";
+      startMsg = t("scan.start.missingSeiyuu");
     } else if (mode.force) {
       url = "/api/scan?force=1";
-      startMsg = "Starting full rescan…";
+      startMsg = t("scan.start.force");
     } else {
       url = "/api/scan";
-      startMsg = "Starting scan…";
+      startMsg = t("scan.start.scan");
     }
 
-    setState({ ...INITIAL_STATE, log: [startMsg], currentStatus: startMsg });
+    setState({ ...initialState(t), log: [startMsg], currentStatus: startMsg });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -327,7 +355,7 @@ export function useScanProgress(): {
       if ((err as Error).name !== "AbortError") {
         setState((prev) => ({
           ...prev,
-          currentStatus: `Scan failed: ${String(err)}`,
+          currentStatus: t("scan.status.failed", { error: String(err) }),
           log: pushLog(prev, `! ${String(err)}`),
           finished: true,
         }));
@@ -371,6 +399,7 @@ function ScanPanel({
   onToggleMinimize: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslations();
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (logRef.current) {
@@ -400,7 +429,11 @@ function ScanPanel({
               busy ? "animate-pulse bg-primary" : state.errorCount ? "bg-destructive" : "bg-emerald-500",
             )}
           />
-          {busy ? "Scanning library" : state.finished ? "Scan complete" : "Scan"}
+          {busy
+            ? t("scan.panel.scanning")
+            : state.finished
+              ? t("scan.panel.complete")
+              : t("scan.panel.idle")}
           {state.total > 0 && (
             <span className="text-muted-foreground text-xs">
               {state.index}/{state.total}
@@ -408,10 +441,20 @@ function ScanPanel({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onToggleMinimize} aria-label={minimized ? "Expand" : "Collapse"}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleMinimize}
+            aria-label={minimized ? t("common.expand") : t("common.collapse")}
+          >
             {minimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={busy ? "Cancel scan" : "Close"}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            aria-label={busy ? t("scan.panel.cancel") : t("common.close")}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -441,7 +484,7 @@ function ScanPanel({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                  no cover yet
+                  {t("scan.panel.noCover")}
                 </div>
               )}
             </div>
@@ -459,7 +502,7 @@ function ScanPanel({
               </div>
               {state.errorCount > 0 && (
                 <div className="mt-1 text-xs text-destructive">
-                  {state.errorCount} error{state.errorCount === 1 ? "" : "s"}
+                  {t("scan.panel.errorCount", { count: state.errorCount })}
                 </div>
               )}
             </div>

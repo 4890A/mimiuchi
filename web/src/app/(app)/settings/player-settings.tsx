@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import {
   usePlayerPrefs,
   type SeekbarStyle,
@@ -55,22 +57,22 @@ function BarPreview() {
 
 const OPTIONS: {
   value: SeekbarStyle;
-  label: string;
-  hint: string;
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
   icon: React.ReactNode;
   preview: React.ReactNode;
 }[] = [
   {
     value: "bar",
-    label: "Classic bar",
-    hint: "A thin progress line along the top edge of the player.",
+    labelKey: "settings.player.bar",
+    hintKey: "settings.player.barHint",
     icon: <Minus className="h-4 w-4" />,
     preview: <BarPreview />,
   },
   {
     value: "waveform",
-    label: "Waveform",
-    hint: "Shows the track's loudness so you can see pauses and peaks before you scrub.",
+    labelKey: "settings.player.waveform",
+    hintKey: "settings.player.waveformHint",
     icon: <AudioLines className="h-4 w-4" />,
     preview: <WaveformPreview />,
   },
@@ -78,23 +80,20 @@ const OPTIONS: {
 
 export function PlayerSettings() {
   const { seekbarStyle, setSeekbarStyle } = usePlayerPrefs();
+  const { t } = useTranslations();
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AudioLines className="h-4 w-4" /> Player seek bar
+          <AudioLines className="h-4 w-4" /> {t("settings.player.title")}
         </CardTitle>
-        <CardDescription>
-          Applies to this device only. Waveforms are generated once per track
-          with ffmpeg and then cached, so the first play of a long file may show
-          a plain bar for a few seconds.
-        </CardDescription>
+        <CardDescription>{t("settings.player.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div
           role="radiogroup"
-          aria-label="Seek bar style"
+          aria-label={t("settings.player.group")}
           className="grid gap-3 sm:grid-cols-2"
         >
           {OPTIONS.map((opt) => {
@@ -114,13 +113,13 @@ export function PlayerSettings() {
               >
                 <div className="flex items-center gap-2 text-sm font-medium">
                   {opt.icon}
-                  {opt.label}
+                  {t(opt.labelKey)}
                   {selected && (
                     <Check className="ml-auto h-4 w-4 text-primary" />
                   )}
                 </div>
                 {opt.preview}
-                <p className="text-xs text-muted-foreground">{opt.hint}</p>
+                <p className="text-xs text-muted-foreground">{t(opt.hintKey)}</p>
               </button>
             );
           })}

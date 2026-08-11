@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 import { usePlayer } from "./player-store";
 import { usePlayerPrefs } from "./player-prefs";
 import { WaveformSeekbar } from "./waveform-seekbar";
@@ -25,6 +26,7 @@ function TopSeekbar({
   duration: number;
   onSeek: (s: number) => void;
 }) {
+  const { t } = useTranslations();
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
@@ -87,7 +89,7 @@ function TopSeekbar({
       aria-valuemin={0}
       aria-valuemax={duration || 1}
       aria-valuenow={value}
-      aria-label="Seek"
+      aria-label={t("player.seek")}
       tabIndex={0}
     >
       <div className="relative w-full overflow-visible bg-muted/60 transition-[height] duration-100 h-0.5 pointer-coarse:h-1 group-hover/seek:h-1.5">
@@ -117,6 +119,7 @@ function VolumeControl({
   volume: number;
   onChange: (v: number) => void;
 }) {
+  const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -168,7 +171,7 @@ function VolumeControl({
         variant="ghost"
         size="icon"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Volume"
+        aria-label={t("player.volume")}
         aria-expanded={open}
         className="h-9 w-9"
       >
@@ -216,6 +219,8 @@ function VolumeControl({
 
 export function PlayerBar() {
   const p = usePlayer();
+  // `t` is the current time in this component, so the translator takes a name.
+  const { t: translate } = useTranslations();
   const { seekbarStyle } = usePlayerPrefs();
   const audioElRef = useRef<HTMLAudioElement | null>(null);
 
@@ -292,7 +297,7 @@ export function PlayerBar() {
               variant="ghost"
               size="icon"
               onClick={p.previous}
-              aria-label="Previous"
+              aria-label={translate("player.previous")}
               className="hidden sm:inline-flex"
             >
               <SkipBack className="h-5 w-5" />
@@ -301,7 +306,9 @@ export function PlayerBar() {
               variant="default"
               size="icon"
               onClick={p.togglePlay}
-              aria-label={p.isPlaying ? "Pause" : "Play"}
+              aria-label={
+                p.isPlaying ? translate("track.pause") : translate("track.play")
+              }
               className="h-10 w-10 rounded-full"
             >
               {p.isPlaying ? (
@@ -314,7 +321,7 @@ export function PlayerBar() {
               variant="ghost"
               size="icon"
               onClick={p.next}
-              aria-label="Next"
+              aria-label={translate("player.next")}
               className="hidden sm:inline-flex"
             >
               <SkipForward className="h-5 w-5" />

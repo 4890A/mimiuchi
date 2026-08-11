@@ -25,7 +25,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useScanProgress } from "@/components/scan-progress";
+import { useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { PlayerSettings } from "./player-settings";
+import { LanguageSettings } from "./language-settings";
 
 interface Settings {
   dlsiteProxyUrl: string;
@@ -51,6 +54,7 @@ export function SettingsForm({
 }) {
   const router = useRouter();
   const scan = useScanProgress();
+  const { t } = useTranslations();
   const [values, setValues] = useState<Settings>(initial);
   const [rootsText, setRootsText] = useState(initial.libraryRoots.join("\n"));
   const [saved, setSaved] = useState<Settings>(initial);
@@ -85,10 +89,10 @@ export function SettingsForm({
       setValues(persisted);
       setRootsText(persisted.libraryRoots.join("\n"));
       setSaved(persisted);
-      toast.success("Settings saved");
+      toast.success(t("settings.saved"));
       router.refresh();
     } catch (err) {
-      toast.error(`Failed to save: ${String(err)}`);
+      toast.error(t("settings.saveFailed", { error: String(err) }));
     } finally {
       setSaving(false);
     }
@@ -96,7 +100,7 @@ export function SettingsForm({
 
   async function testProxy() {
     if (!values.dlsiteProxyUrl.trim()) {
-      setTest({ state: "fail", message: "Enter a proxy URL first" });
+      setTest({ state: "fail", message: t("settings.proxy.needUrl") });
       return;
     }
     setTest({ state: "testing" });
@@ -115,6 +119,9 @@ export function SettingsForm({
 
   return (
     <div className="space-y-6">
+      {/* Language */}
+      <LanguageSettings />
+
       {/* Player */}
       <PlayerSettings />
 
@@ -122,12 +129,9 @@ export function SettingsForm({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <PlugZap className="h-4 w-4" /> DLsite proxy
+            <PlugZap className="h-4 w-4" /> {t("settings.proxy.title")}
           </CardTitle>
-          <CardDescription>
-            Route DLsite metadata and image requests through an HTTP proxy
-            (e.g. a Japan-based proxy like glueton). HVDB is not proxied.
-          </CardDescription>
+          <CardDescription>{t("settings.proxy.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <label className="flex items-center gap-2 text-sm">
@@ -145,10 +149,12 @@ export function SettingsForm({
               }}
               className="h-4 w-4"
             />
-            Enable DLsite proxy
+            {t("settings.proxy.enable")}
           </label>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Proxy URL</label>
+            <label className="text-xs text-muted-foreground">
+              {t("settings.proxy.url")}
+            </label>
             <div className="flex gap-2">
               <Input
                 value={values.dlsiteProxyUrl}
@@ -170,7 +176,7 @@ export function SettingsForm({
                 ) : (
                   <PlugZap className="h-4 w-4" />
                 )}
-                Test
+                {t("settings.proxy.test")}
               </Button>
             </div>
             {test.state === "ok" && (
@@ -190,16 +196,13 @@ export function SettingsForm({
       {/* Paths */}
       <Card>
         <CardHeader>
-          <CardTitle>Library paths</CardTitle>
-          <CardDescription>
-            Leave blank to use env defaults (KIKOERU_LIBRARY_ROOT,
-            KIKOERU_COVERS_DIR).
-          </CardDescription>
+          <CardTitle>{t("settings.paths.title")}</CardTitle>
+          <CardDescription>{t("settings.paths.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">
-              Library roots (one path per line)
+              {t("settings.paths.roots")}
             </label>
             <Textarea
               value={rootsText}
@@ -210,7 +213,7 @@ export function SettingsForm({
               className="font-mono text-xs"
             />
             <div className="text-xs text-muted-foreground">
-              Effective:
+              {t("settings.paths.effective")}
               <ul className="mt-1 space-y-0.5">
                 {effective.libraryRoots.map((r) => (
                   <li key={r} className="font-mono">{r}</li>
@@ -219,7 +222,9 @@ export function SettingsForm({
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Covers directory</label>
+            <label className="text-xs text-muted-foreground">
+              {t("settings.paths.covers")}
+            </label>
             <Input
               value={values.coversDir}
               onChange={(e) =>
@@ -229,7 +234,8 @@ export function SettingsForm({
               spellCheck={false}
             />
             <p className="text-xs text-muted-foreground">
-              Effective: <span className="font-mono">{effective.coversDir}</span>
+              {t("settings.paths.effective")}{" "}
+              <span className="font-mono">{effective.coversDir}</span>
             </p>
           </div>
         </CardContent>
@@ -237,60 +243,58 @@ export function SettingsForm({
 
       <div className="flex items-center justify-end gap-3">
         {dirty && (
-          <span className="text-xs text-amber-500">
-            Unsaved changes — scans use saved settings only
-          </span>
+          <span className="text-xs text-amber-500">{t("settings.unsaved")}</span>
         )}
         <Button onClick={() => save()} disabled={!dirty || saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save settings
+          {t("settings.save")}
         </Button>
       </div>
 
       {/* Scan actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Library scans</CardTitle>
-          <CardDescription>
-            Run scans using the current paths. Progress shows in a panel.
-          </CardDescription>
+          <CardTitle>{t("settings.scans.title")}</CardTitle>
+          <CardDescription>{t("settings.scans.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <ScanRow
-            label="Incremental scan"
-            hint="New works and missing covers/metadata only"
+            labelKey="settings.scans.incremental"
+            hint={t("settings.scans.incrementalHint")}
             icon={<RefreshCw className="h-4 w-4" />}
             disabled={scan.busy}
             onClick={() => scan.start({ kind: "library" })}
           />
           <ScanRow
-            label="Force full rescan"
-            hint="Re-fetch all metadata and covers"
+            labelKey="settings.scans.force"
+            hint={t("settings.scans.forceHint")}
             icon={<RotateCw className="h-4 w-4" />}
             disabled={scan.busy}
             onClick={() => scan.start({ kind: "library", force: true })}
           />
           <ScanRow
-            label="Re-scan works missing seiyuu"
+            labelKey="settings.scans.missingSeiyuu"
             hint={
               missingSeiyuuCount === 0
-                ? "No works missing seiyuu"
-                : `${missingSeiyuuCount} work${missingSeiyuuCount === 1 ? "" : "s"} have no voice actors`
+                ? t("settings.scans.missingSeiyuuNone")
+                : t("settings.scans.missingSeiyuuHint", {
+                    count: missingSeiyuuCount,
+                  })
             }
             icon={<Mic2 className="h-4 w-4" />}
             disabled={scan.busy || missingSeiyuuCount === 0}
             onClick={() => scan.start({ kind: "library", missingSeiyuu: true })}
           />
           <ScanRow
-            label="Scan missing track durations"
-            hint="Tracks without a stored duration"
+            labelKey="settings.scans.durations"
+            hint={t("settings.scans.durationsHint")}
             icon={<Timer className="h-4 w-4" />}
             disabled={scan.busy}
             onClick={() => scan.start({ kind: "durations" })}
           />
           <ScanRow
-            label="Re-scan all track durations"
-            hint="Every track"
+            labelKey="settings.scans.durationsAll"
+            hint={t("settings.scans.durationsAllHint")}
             icon={<Timer className="h-4 w-4" />}
             disabled={scan.busy}
             onClick={() => scan.start({ kind: "durations", all: true })}
@@ -304,29 +308,30 @@ export function SettingsForm({
 }
 
 function ScanRow({
-  label,
+  labelKey,
   hint,
   icon,
   disabled,
   onClick,
 }: {
-  label: string;
+  labelKey: TranslationKey;
   hint: string;
   icon: React.ReactNode;
   disabled?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslations();
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-sm font-medium">
           {icon}
-          {label}
+          {t(labelKey)}
         </div>
         <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
       <Button variant="outline" size="sm" onClick={onClick} disabled={disabled}>
-        Run
+        {t("common.run")}
       </Button>
     </div>
   );

@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useTranslations } from "@/lib/i18n/client";
 
 export function DeleteWorkButton({
   workId,
@@ -23,6 +24,7 @@ export function DeleteWorkButton({
   workId: string;
   workTitle: string;
 }) {
+  const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -37,20 +39,22 @@ export function DeleteWorkButton({
           />
         }
       >
-        Delete entry
+        {t("delete.trigger")}
         <Trash2 className="h-3 w-3" />
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete this entry?</DialogTitle>
+          <DialogTitle>{t("delete.title")}</DialogTitle>
           <DialogDescription>
-            Removes <span className="font-medium text-foreground">{workTitle}</span>{" "}
-            ({workId}) from the library, along with its tracks, tags, likes, and
-            playback progress. Your audio files on disk are not touched.
+            {t("delete.before")}
+            <span className="font-medium text-foreground">{workTitle}</span>
+            {t("delete.after", { id: workId })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>
+            {t("common.cancel")}
+          </DialogClose>
           <Button
             variant="destructive"
             disabled={pending}
@@ -58,17 +62,17 @@ export function DeleteWorkButton({
               startTransition(async () => {
                 const r = await deleteWork(workId);
                 if (!r.ok) {
-                  toast.error(`Couldn't delete: ${r.error}`);
+                  toast.error(t("delete.failed", { error: r.error }));
                   return;
                 }
-                toast.success("Entry deleted");
+                toast.success(t("delete.done"));
                 setOpen(false);
                 router.push("/");
                 router.refresh();
               });
             }}
           >
-            {pending ? "Deleting…" : "Delete"}
+            {pending ? t("delete.deleting") : t("delete.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

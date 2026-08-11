@@ -5,6 +5,7 @@ import { Plus, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { addTagToWork } from "@/lib/actions";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 
 interface TagSuggestion {
   type: "tag";
@@ -21,6 +22,7 @@ export function AddTagButton({
   workId: string;
   existingTagNames: string[];
 }) {
+  const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<TagSuggestion[]>([]);
@@ -113,7 +115,7 @@ export function AddTagButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Add tag"
+        aria-label={t("addTag.label")}
         className="inline-flex items-center gap-0.5 rounded-full bg-secondary/60 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-secondary-foreground"
       >
         <Plus className="h-3.5 w-3.5" />
@@ -129,12 +131,12 @@ export function AddTagButton({
 
   return (
     <div ref={wrapRef} className="relative">
-      <CommandPrimitive shouldFilter={false} loop label="Add tag">
+      <CommandPrimitive shouldFilter={false} loop label={t("addTag.label")}>
         <div className="relative">
           <CommandPrimitive.Input asChild value={q} onValueChange={setQ}>
             <Input
               ref={inputRef}
-              placeholder="Add tag…"
+              placeholder={t("edit.addTagPlaceholder")}
               className={cn("h-7 w-44 px-2 text-xs", (pending || loading) && "pr-7")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -182,13 +184,14 @@ export function AddTagButton({
                 >
                   <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="truncate">
-                    Create <span className="font-medium">&quot;{trimmed}&quot;</span>
+                    {t("addTag.create")}{" "}
+                    <span className="font-medium">&quot;{trimmed}&quot;</span>
                   </span>
                 </CommandPrimitive.Item>
               )}
               {!loading && !showCreate && items.length === 0 && (
                 <CommandPrimitive.Empty className="px-3 py-4 text-center text-xs text-muted-foreground">
-                  No matches.
+                  {t("common.noMatches")}
                 </CommandPrimitive.Empty>
               )}
             </CommandPrimitive.List>

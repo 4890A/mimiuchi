@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 
 interface Suggestion {
   type: string;
@@ -41,6 +42,7 @@ function TokenField({
   suggestType: "seiyuu" | "tag";
   placeholder: string;
 }) {
+  const { t } = useTranslations();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(0);
@@ -117,7 +119,7 @@ function TokenField({
             <button
               type="button"
               onClick={() => remove(v)}
-              aria-label={`Remove ${v}`}
+              aria-label={t("edit.remove", { name: v })}
               className="text-muted-foreground hover:text-foreground"
             >
               <X className="h-3 w-3" />
@@ -182,7 +184,8 @@ function TokenField({
                     active === items.length && "bg-secondary",
                   )}
                 >
-                  Add <span className="font-medium">&quot;{q.trim()}&quot;</span>
+                  {t("edit.addValue")}{" "}
+                  <span className="font-medium">&quot;{q.trim()}&quot;</span>
                 </button>
               </li>
             )}
@@ -230,6 +233,7 @@ export function EditWorkDialog({
   initial: EditWorkInitial;
   coverSrc: string;
 }) {
+  const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -282,7 +286,7 @@ export function EditWorkDialog({
 
   function save() {
     if (!title.trim()) {
-      toast.error("Title is required");
+      toast.error(t("edit.titleRequired"));
       return;
     }
     startTransition(async () => {
@@ -298,7 +302,7 @@ export function EditWorkDialog({
         tags,
       });
       if (!meta.ok) {
-        toast.error(`Couldn't save: ${meta.error}`);
+        toast.error(t("edit.saveFailed", { error: meta.error }));
         return;
       }
 
@@ -307,7 +311,7 @@ export function EditWorkDialog({
         fd.append("cover", coverFile);
         const c = await uploadWorkCover(workId, fd);
         if (!c.ok) {
-          toast.error(`Details saved, but cover failed: ${c.error}`);
+          toast.error(t("edit.coverFailed", { error: c.error }));
           setOpen(false);
           router.refresh();
           return;
@@ -315,14 +319,14 @@ export function EditWorkDialog({
       } else if (coverUrl.trim() && coverUrl.trim() !== (initial.coverUrl ?? "")) {
         const c = await setWorkCoverUrl(workId, coverUrl);
         if (!c.ok) {
-          toast.error(`Details saved, but cover URL failed: ${c.error}`);
+          toast.error(t("edit.coverUrlFailed", { error: c.error }));
           setOpen(false);
           router.refresh();
           return;
         }
       }
 
-      toast.success("Work updated");
+      toast.success(t("edit.updated"));
       setOpen(false);
       router.refresh();
     });
@@ -338,12 +342,12 @@ export function EditWorkDialog({
           />
         }
       >
-        Edit work
+        {t("edit.trigger")}
         <Pencil className="h-3 w-3" />
       </DialogTrigger>
       <DialogContent className="scrollbar-hide max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
         <DialogHeader className="p-4 pb-2">
-          <DialogTitle>Edit work</DialogTitle>
+          <DialogTitle>{t("edit.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 px-4 pb-4">
@@ -373,13 +377,13 @@ export function EditWorkDialog({
                 onClick={() => fileRef.current?.click()}
               >
                 <ImageUp className="h-4 w-4" />
-                {coverFile ? "Change file…" : "Upload image…"}
+                {coverFile ? t("edit.changeFile") : t("edit.uploadImage")}
               </Button>
               {coverFile ? (
                 <p className="truncate text-xs text-muted-foreground">{coverFile.name}</p>
               ) : (
                 <Input
-                  placeholder="…or paste image URL"
+                  placeholder={t("edit.coverUrlPlaceholder")}
                   value={coverUrl}
                   onChange={(e) => setCoverUrl(e.target.value)}
                   className="h-8 text-xs"
@@ -388,48 +392,48 @@ export function EditWorkDialog({
             </div>
           </div>
 
-          <Field label="Title">
+          <Field label={t("edit.field.title")}>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Circle / サークル">
+            <Field label={t("edit.field.circle")}>
               <Input value={circleName} onChange={(e) => setCircleName(e.target.value)} />
             </Field>
-            <Field label="Release date">
+            <Field label={t("edit.field.releaseDate")}>
               <Input
                 placeholder="YYYY-MM-DD"
                 value={releaseDate}
                 onChange={(e) => setReleaseDate(e.target.value)}
               />
             </Field>
-            <Field label="Work type">
+            <Field label={t("edit.field.workType")}>
               <Input value={workType} onChange={(e) => setWorkType(e.target.value)} />
             </Field>
-            <Field label="Language">
+            <Field label={t("edit.field.language")}>
               <Input value={language} onChange={(e) => setLanguage(e.target.value)} />
             </Field>
           </div>
 
-          <Field label="声優 / Voice actors">
+          <Field label={t("edit.field.voiceActors")}>
             <TokenField
               values={voiceActors}
               onChange={setVoiceActors}
               suggestType="seiyuu"
-              placeholder="Add voice actor…"
+              placeholder={t("edit.addVoiceActor")}
             />
           </Field>
 
-          <Field label="ジャンル / Tags">
+          <Field label={t("edit.field.tags")}>
             <TokenField
               values={tags}
               onChange={setTags}
               suggestType="tag"
-              placeholder="Add tag…"
+              placeholder={t("edit.addTagPlaceholder")}
             />
           </Field>
 
-          <Field label="Description">
+          <Field label={t("edit.field.description")}>
             <Textarea
               rows={3}
               value={description}
@@ -444,15 +448,17 @@ export function EditWorkDialog({
               onChange={(e) => setNsfw(e.target.checked)}
               className="h-4 w-4 accent-primary"
             />
-            R18 / NSFW
+            {t("edit.nsfw")}
           </label>
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>
+            {t("common.cancel")}
+          </DialogClose>
           <Button disabled={pending} onClick={save}>
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {pending ? "Saving…" : "Save changes"}
+            {pending ? t("edit.saving") : t("edit.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

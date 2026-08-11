@@ -16,6 +16,7 @@ import {
   useBookmarkMap,
 } from "@/components/player/bookmark-store";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 
 interface Track {
   id: number;
@@ -87,6 +88,8 @@ export function TrackList({
   coverSrc: string;
 }) {
   const p = usePlayer();
+  // Rows bind `t` to a track below, so the translator takes a name.
+  const { t: translate } = useTranslations();
   const bookmarkMap = useBookmarkMap();
 
   const trackIds = useMemo(() => tracks.map((t) => t.id), [tracks]);
@@ -190,7 +193,9 @@ export function TrackList({
             if (isCurrent) p.togglePlay();
             else p.playQueue(queueTracks, queueIndex);
           }}
-          aria-label={playingThis ? "Pause" : "Play"}
+          aria-label={
+            playingThis ? translate("track.pause") : translate("track.play")
+          }
         >
           {playingThis ? (
             <Pause className="h-4 w-4" />
@@ -254,14 +259,18 @@ export function TrackList({
           type="button"
           onClick={toggleAll}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-          aria-label={anyOpen ? "Collapse all folders" : "Expand all folders"}
+          aria-label={
+            anyOpen
+              ? translate("track.collapseAllFolders")
+              : translate("track.expandAllFolders")
+          }
         >
           {anyOpen ? (
             <ChevronsDownUp className="h-3.5 w-3.5" />
           ) : (
             <ChevronsUpDown className="h-3.5 w-3.5" />
           )}
-          {anyOpen ? "Collapse all" : "Expand all"}
+          {anyOpen ? translate("track.collapseAll") : translate("track.expandAll")}
         </button>
       </div>
       {groups.map((g, gi) => {

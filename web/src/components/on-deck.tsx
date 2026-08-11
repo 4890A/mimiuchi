@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { coverSrc } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 import { getRandomWorks } from "@/lib/actions";
+import { useTranslations } from "@/lib/i18n/client";
 import type { RecentWork } from "@/lib/db/queries";
 
 export function OnDeck({
@@ -16,6 +17,7 @@ export function OnDeck({
   works: RecentWork[];
   initialRandom: RecentWork[];
 }) {
+  const { t } = useTranslations();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [random, setRandom] = useState(initialRandom);
   const [showRandom, setShowRandom] = useState(false);
@@ -54,31 +56,31 @@ export function OnDeck({
     <section className="mb-6">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {showRandom ? "Random" : "On deck"}
+          {showRandom ? t("onDeck.random") : t("onDeck.title")}
         </h2>
         <button
           type="button"
           onClick={onShuffle}
           disabled={isPending}
           aria-pressed={showRandom}
-          title={showRandom ? "Shuffle again" : "Show random works"}
+          title={showRandom ? t("onDeck.shuffleAgain") : t("onDeck.showRandom")}
           className={cn(
             "rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
             showRandom && "text-foreground",
           )}
         >
           <Shuffle className={cn("h-3.5 w-3.5", isPending && "animate-spin")} />
-          <span className="sr-only">Shuffle</span>
+          <span className="sr-only">{t("onDeck.shuffle")}</span>
         </button>
         {showRandom && (
           <button
             type="button"
             onClick={() => setShowRandom(false)}
-            title="Back to on deck"
+            title={t("onDeck.back")}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <History className="h-3.5 w-3.5" />
-            <span className="sr-only">Back to on deck</span>
+            <span className="sr-only">{t("onDeck.back")}</span>
           </button>
         )}
       </div>

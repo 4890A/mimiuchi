@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
 
 const STORAGE_KEY = "library:card-size";
 
@@ -17,6 +18,7 @@ type PresetKey = (typeof PRESETS)[number]["key"];
 const DEFAULT: PresetKey = "m";
 
 export function LibraryGridSize({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslations();
   const [preset, setPreset] = useState<PresetKey>(DEFAULT);
   const [ready, setReady] = useState(false);
 
@@ -54,7 +56,7 @@ export function LibraryGridSize({ children }: { children: React.ReactNode }) {
         <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
         <div
           role="radiogroup"
-          aria-label="Card size"
+          aria-label={t("library.cardSize")}
           className="inline-flex overflow-hidden rounded-md border bg-background"
         >
           {PRESETS.map((p) => (

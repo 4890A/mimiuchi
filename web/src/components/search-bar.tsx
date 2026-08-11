@@ -5,6 +5,8 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search, Mic2, Users, Tag as TagIcon, Disc3, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 
 interface Suggestion {
   type: "seiyuu" | "circle" | "tag" | "work";
@@ -15,11 +17,11 @@ interface Suggestion {
   score: number;
 }
 
-const TYPE_LABELS: Record<Suggestion["type"], string> = {
-  seiyuu: "Seiyuu",
-  circle: "Circles",
-  tag: "Tags",
-  work: "Works",
+const TYPE_LABEL_KEYS: Record<Suggestion["type"], TranslationKey> = {
+  seiyuu: "search.group.seiyuu",
+  circle: "search.group.circle",
+  tag: "search.group.tag",
+  work: "search.group.work",
 };
 
 const TYPE_ORDER: Suggestion["type"][] = ["seiyuu", "circle", "tag", "work"];
@@ -55,6 +57,7 @@ export function SearchBar() {
   const router = useRouter();
   const params = useSearchParams();
   const pathname = usePathname();
+  const { t } = useTranslations();
   const [q, setQ] = useState(params.get("q") ?? "");
   const urlSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [open, setOpen] = useState(false);
@@ -174,14 +177,14 @@ export function SearchBar() {
 
   return (
     <div ref={wrapRef} className="relative ml-auto flex-1 max-w-md">
-      <CommandPrimitive shouldFilter={false} loop label="Search">
+      <CommandPrimitive shouldFilter={false} loop label={t("common.search")}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <CommandPrimitive.Input asChild value={q} onValueChange={setQ}>
             <Input
               ref={inputRef}
               suppressHydrationWarning
-              placeholder="Search seiyuu, circles, tags, works…"
+              placeholder={t("search.placeholder")}
               className={cn("pl-9", (pending || loading) && "pr-8")}
               onFocus={() => setOpen(true)}
               onKeyDown={(e) => {
@@ -212,13 +215,13 @@ export function SearchBar() {
             <CommandPrimitive.List className="max-h-[60vh] overflow-y-auto p-1">
               {!loading && items.length === 0 && (
                 <CommandPrimitive.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  No matches. Press Enter to search anyway.
+                  {t("search.empty")}
                 </CommandPrimitive.Empty>
               )}
               {grouped.map(({ type, items: list }) => (
                 <CommandPrimitive.Group
                   key={type}
-                  heading={TYPE_LABELS[type]}
+                  heading={t(TYPE_LABEL_KEYS[type])}
                   className="overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
                 >
                   {list.map((s) => (
@@ -248,7 +251,7 @@ export function SearchBar() {
               ))}
               {q.trim() && (
                 <div className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-                  Enter to search titles for &quot;{q.trim()}&quot;
+                  {t("search.enterHint", { query: q.trim() })}
                 </div>
               )}
             </CommandPrimitive.List>

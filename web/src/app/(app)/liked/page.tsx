@@ -3,11 +3,13 @@ import { Heart } from "lucide-react";
 import { listLikedTracks } from "@/lib/db/queries";
 import { coverSrc } from "@/lib/cover";
 import { LikedTrackList } from "./_liked-list";
+import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function LikedPage() {
   const tracks = await Promise.resolve(listLikedTracks());
+  const { t } = await getTranslations();
 
   return (
     <div className="mx-auto max-w-5xl px-3 py-6 sm:px-6 sm:py-10">
@@ -16,16 +18,18 @@ export default async function LikedPage() {
           <Heart className="h-6 w-6 fill-red-500 text-red-500" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Liked tracks</h1>
-          <p className="text-sm text-muted-foreground">{tracks.length} tracks</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("liked.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t("liked.trackCount", { count: tracks.length })}
+          </p>
         </div>
       </div>
 
       {tracks.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-muted/30 px-6 py-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Tap the heart icon on any track to add it here.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("liked.empty")}</p>
         </div>
       ) : (
         <LikedTrackList
