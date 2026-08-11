@@ -22,5 +22,10 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // `/api/backup/import` is exempt: the proxy buffers a matched request's body
+  // so it can be read twice, capped by `proxyClientMaxBodySize` (10MB by
+  // default). A backup upload is far larger than that and would arrive
+  // truncated. The route authenticates itself instead — see its own
+  // `isAuthenticated()` check.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/backup/import).*)"],
 };

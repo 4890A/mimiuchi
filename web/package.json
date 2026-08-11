@@ -10,7 +10,10 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "scan": "tsx --env-file=.env.local scripts/scan.ts"
+    "scan": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/scan.ts",
+    "backup": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/backup.ts",
+    "restore": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/restore.ts",
+    "test": "tsx --tsconfig scripts/tsconfig.json --test src/lib/backup.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -2,6 +2,7 @@ import { getSettings } from "@/lib/settings";
 import { resolveLibraryRoots, resolveCoversDir } from "@/lib/config";
 import { listWorkIdsMissingSeiyuu } from "@/lib/db/repository";
 import { SettingsForm } from "./settings-form";
+import { BackupRestore } from "@/components/backup-restore";
 import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,9 @@ export default async function SettingsPage() {
         effective={effective}
         missingSeiyuuCount={missingSeiyuuCount}
       />
+      <div className="mt-8">
+        <BackupRestore />
+      </div>
     </div>
   );
 }
