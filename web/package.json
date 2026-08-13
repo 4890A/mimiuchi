@@ -13,7 +13,8 @@
     "scan": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/scan.ts",
     "backup": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/backup.ts",
     "restore": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/restore.ts",
-    "test": "tsx --tsconfig scripts/tsconfig.json --test src/lib/backup.test.ts"
+    "test": "tsx --tsconfig scripts/tsconfig.json --test \"src/**/*.test.ts\"",
+    "test:fixtures": "tsx --tsconfig scripts/tsconfig.json scripts/capture-fixtures.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
