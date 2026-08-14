@@ -61,7 +61,9 @@ beforeEach(() => {
 
 function wipe(): void {
   sqlite.pragma("foreign_keys = OFF");
-  for (const table of backup.BACKUP_TABLES) {
+  // `track_waveforms` is not a backed-up table, but the seed fills it so the
+  // export tests can prove it stays out of the file.
+  for (const table of [...backup.BACKUP_TABLES, "track_waveforms"]) {
     sqlite.prepare(`DELETE FROM "${table}"`).run();
   }
   sqlite.pragma("foreign_keys = ON");
@@ -170,27 +172,12 @@ test("export produces valid BackupData", async () => {
   );
 });
 
-test("base64 round-trips blobs", async () => {
+test("waveform caches are never exported", async () => {
   seed();
+  assert.equal(count("track_waveforms"), 1);
+
   const data = await backup.createBackup();
-
-  const row = data.data.track_waveforms[0];
-  assert.equal(typeof row.peaks, "string");
-  assert.deepEqual(Buffer.from(row.peaks as string, "base64"), PEAKS);
-
-  wipe();
-  await backup.restoreBackup(data);
-
-  const restored = sqlite
-    .prepare(`SELECT peaks FROM track_waveforms WHERE track_id = 1`)
-    .get() as { peaks: Buffer };
-  assert.deepEqual(restored.peaks, PEAKS);
-});
-
-test("includeWaveforms:false omits the waveform table", async () => {
-  seed();
-  const data = await backup.createBackup({ includeWaveforms: false });
-  assert.deepEqual(data.data.track_waveforms, []);
+  assert.ok(!("track_waveforms" in data.data));
   // Everything else is still there.
   assert.equal(data.data.tracks.length, 1);
 });
@@ -224,7 +211,6 @@ test("full round-trip restores every table", async () => {
   assert.equal(summary.imported.works, 2);
   assert.equal(summary.imported.tracks, 1);
   assert.equal(summary.imported.likes, 1);
-  assert.equal(summary.imported.track_waveforms, 1);
 
   const after = await backup.createBackup();
   // folder_path is intentionally rewritten on restore; everything else must
@@ -454,13 +440,25 @@ test("dry run reports counts but writes nothing", async () => {
   assert.equal(fs.readdirSync(coversDir).length, 0);
 });
 
-test("restore skips waveforms when asked", async () => {
+test("waveforms carried by an older backup are ignored", async () => {
   seed();
   const data = await backup.createBackup();
   wipe();
 
-  const summary = await backup.restoreBackup(data, { includeWaveforms: false });
-  assert.equal(summary.imported.track_waveforms, 0);
+  // Backups taken while the export still included waveforms.
+  (data.data as Record<string, unknown>).track_waveforms = [
+    {
+      track_id: 1,
+      version: 1,
+      buckets: PEAKS.length,
+      peaks: PEAKS.toString("base64"),
+      created_at: 1700000000000,
+    },
+  ];
+
+  const summary = await backup.restoreBackup(data);
+  assert.deepEqual(summary.errors, []);
+  assert.equal(summary.imported.track_waveforms, undefined);
   assert.equal(count("track_waveforms"), 0);
   assert.equal(count("tracks"), 1);
 });

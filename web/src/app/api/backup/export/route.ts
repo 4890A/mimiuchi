@@ -7,9 +7,7 @@ function filename(): string {
   return `kikoeru-backup-${date}.json`;
 }
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const includeWaveforms = url.searchParams.get("includeWaveforms") !== "false";
+export async function GET() {
   const encoder = new TextEncoder();
 
   // Streamed chunk-by-chunk so a large library's base64 covers never have to
@@ -17,7 +15,7 @@ export async function GET(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const chunk of streamBackup({ includeWaveforms })) {
+        for await (const chunk of streamBackup()) {
           controller.enqueue(encoder.encode(chunk));
         }
         controller.close();

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A JSON-based backup and restore system for kikoeru-nouveau that exports all database metadata, cover images, and waveform caches. The format is designed to be robust against schema changes: columns added after the backup was created get database defaults, and columns removed by migrations are silently ignored on import.
+A JSON-based backup and restore system for kikoeru-nouveau that exports all database metadata and cover images. Waveform caches are left out — they are regenerable from the audio and would dominate the file size. The format is designed to be robust against schema changes: columns added after the backup was created get database defaults, and columns removed by migrations are silently ignored on import.
 
 ---
 
@@ -81,14 +81,6 @@ A single `.kikoeru-backup.json` file with the following structure:
         "updated_at": 1700000000000
       }
     ],
-    "track_waveforms": [
-      {
-        "track_id": 1,
-        "version": 1,
-        "buckets": 200,
-        "peaks": "<base64-encoded-binary>"
-      }
-    ],
     "settings": [
       { "key": "dlsite.proxy.url", "value": "http://proxy:8080" },
       { "key": "dlsite.proxy.enabled", "value": "1" },
@@ -109,8 +101,8 @@ A single `.kikoeru-backup.json` file with the following structure:
 ### Notes on the format
 
 - Table rows use the **database column names** (snake_case) — exactly as they appear in the SQLite schema via Drizzle ORM. This is what Drizzle returns when querying.
-- BLOB columns (`track_waveforms.peaks`) are **base64-encoded strings** in the JSON.
-- `track_waveforms` is included by default but can be excluded via `?includeWaveforms=false` since the data is regenerable.
+- BLOB columns are **base64-encoded strings** in the JSON. No backed-up table currently has one; the encoding is driven by `PRAGMA table_info`, so a future blob column travels without further work.
+- `track_waveforms` is not exported at all. Waveforms regenerate from the audio with ffmpeg on first play, and carrying them made backups several times larger. A backup taken before this was dropped still restores — the extra table is simply ignored.
 - Bookmarks are stored in the `settings` table with keys like `bookmarks.track.{trackId}`, so they are naturally included in the settings export.
 - Timestamps are **unix epoch milliseconds** (as stored in the database).
 
@@ -220,9 +212,8 @@ Tables must be imported in dependency order to satisfy foreign key constraints (
 | 7 | `tracks` | `works` | `onConflictDoNothing` |
 | 8 | `likes` | `tracks` | `onConflictDoNothing` |
 | 9 | `track_progress` | `tracks` | `onConflictDoNothing` |
-| 10 | `track_waveforms` | `tracks` | `onConflictDoNothing` (bypasses ORM for blob insert) |
-| 11 | `settings` | — | `onConflictDoUpdate` (upsert) |
-| 12 | Covers | — | Write files to disk |
+| 10 | `settings` | — | `onConflictDoUpdate` (upsert) |
+| 11 | Covers | — | Write files to disk |
 
 `onConflictDoNothing` makes re-importing the same backup idempotent (no duplicate rows).
 
@@ -281,7 +272,6 @@ export interface BackupTables {
   tracks: Record<string, unknown>[];
   likes: Record<string, unknown>[];
   track_progress: Record<string, unknown>[];
-  track_waveforms: Record<string, unknown>[];
   settings: Record<string, unknown>[];
 }
 
@@ -293,16 +283,12 @@ export interface RestoreSummary {
   errors: string[];
 }
 
-export interface ExportOptions {
-  includeWaveforms?: boolean;
-}
-
 export interface RestoreOptions {
   dryRun?: boolean;
 }
 
 // Functions
-export async function createBackup(options?: ExportOptions): Promise<BackupData>;
+export async function createBackup(): Promise<BackupData>;
 export async function restoreBackup(data: BackupData, options?: RestoreOptions): Promise<RestoreSummary>;
 export function buildRjPathMap(libraryRoots: string[]): Map<string, string>;
 ```
@@ -312,12 +298,12 @@ export function buildRjPathMap(libraryRoots: string[]): Map<string, string>;
 - `createBackup()`: Queries all tables using Drizzle, base64-encodes blob data, reads cover files from covers directory, serializes to `BackupData`.
 - `restoreBackup()`: Validates version, builds path map, runs import in transaction. For each table: introspects current schema columns, filters rows, inserts with `onConflictDoNothing`.
 - `buildRjPathMap()`: Walks library roots recursively, matches directory names against RJ regex, returns map.
-- Blob insertion for `track_waveforms` bypasses Drizzle and uses raw SQL via `better-sqlite3` to handle base64 → Buffer conversion.
+- Inserts bypass Drizzle and use raw SQL via `better-sqlite3`, so the column set can be decided per row from the live schema.
 
 ### `web/src/app/api/backup/export/route.ts` — Export API
 
 ```
-GET /api/backup/export?includeWaveforms=true
+GET /api/backup/export
 
 Headers:
   Content-Type: application/json
@@ -327,7 +313,7 @@ Response: BackupData JSON (potentially streamed for large libraries)
 ```
 
 - Authenticated route (requires login)
-- Calls `createBackup()` with `includeWaveforms` from query params
+- Calls `createBackup()`
 - Uses `transformStream` or `ReadableStream` for the response body to avoid memory issues with large backups
 - Sets `Content-Disposition` for file download
 
@@ -343,7 +329,7 @@ Response (200):
 {
   "imported": { "circles": 5, "voice_actors": 12, "tags": 30, "works": 120,
                 "work_voice_actors": 240, "work_tags": 360, "tracks": 340,
-                "likes": 50, "track_progress": 40, "track_waveforms": 340,
+                "likes": 50, "track_progress": 40,
                 "settings": 60, "covers": 120 },
   "remapped": 118,
   "notFound": ["RJ99999999", "RJ88888888"],
@@ -380,14 +366,11 @@ A card rendered on the Settings page with two sections:
 │ Export your library metadata, play progress,    │
 │ likes, and covers to a backup file.             │
 │                                                 │
-│ [x] Include waveform data                       │
-│                                                 │
 │ [ Download Backup ]                             │
 │                                                 │
 └─────────────────────────────────────────────────┘
 ```
 
-- "Include waveform data" checkbox — default checked
 - "Download Backup" button — calls `GET /api/backup/export`, triggers browser download
 - Button shows loading spinner during export
 - On error, shows toast with error message
@@ -426,7 +409,6 @@ Works:        120 imported (118 paths remapped)
 Tracks:       340 imported
 Likes:        50 imported
 Progress:     40 imported
-Waveforms:    340 imported
 Covers:       120 written
 Settings:     60 imported
 
@@ -529,9 +511,6 @@ For users who prefer command-line operations or want to automate backups:
 ```bash
 # Basic backup
 pnpm tsx scripts/backup.ts --output ./backups/backup-2026-08-06.json
-
-# Without waveform data (smaller file)
-pnpm tsx scripts/backup.ts --output ./backups/backup.json --no-waveforms
 ```
 
 ### `web/scripts/restore.ts`
@@ -542,9 +521,6 @@ pnpm tsx scripts/restore.ts ./backups/backup.json --dry-run
 
 # Full restore
 pnpm tsx scripts/restore.ts ./backups/backup.json
-
-# Full restore without waveforms (skip waveform import)
-pnpm tsx scripts/restore.ts ./backups/backup.json --no-waveforms
 ```
 
 ---
@@ -554,6 +530,7 @@ pnpm tsx scripts/restore.ts ./backups/backup.json --no-waveforms
 | Data | Reason |
 |------|--------|
 | **Audio files** | Source of truth — re-discovered by scanner |
+| **Waveform caches** (`track_waveforms`) | Regenerable from the audio with ffmpeg, and by far the largest table |
 | **Session secret** (`data/session-secret`) | Auto-generated on first startup |
 | **Search index** | Rebuilt in-memory on server startup |
 | **`cover_url` (remote URL)** | Embedded as `cover_path` + actual image data in `covers` object — the remote URL is secondary |
@@ -602,7 +579,7 @@ pnpm tsx scripts/restore.ts ./backups/backup.json --no-waveforms
 - **Path remapping finds RJ directories** — mock directory structure, verify map is correct
 - **Path remapping handles work not found** — verify old path preserved, warning emitted
 - **Dry run rolls back** — insert data with dry run, verify no data persisted
-- **Base64 round-trips blobs** — export waveform blob, import, verify buffer matches
+- **Waveforms stay out** — seed a waveform cache, verify the export omits the table and that an older backup carrying it restores without writing the rows
 
 ### Integration tests
 
