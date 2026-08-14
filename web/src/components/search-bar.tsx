@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { Search, Mic2, Users, Tag as TagIcon, Disc3, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 
@@ -68,16 +67,33 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // An IME (Japanese, Chinese, Korean) keeps a composition buffer inside the
+  // input that React knows nothing about. Writing `value` while that buffer is
+  // open desyncs the two: the browser re-commits the composition on top of the
+  // value we just wrote, which shows up as duplicated kana and leftover romaji.
+  // Tracked twice on purpose: the state re-runs the debounced effects once the
+  // composition commits, while the URL→input effect reads the ref instead, so
+  // that it is not itself re-triggered on commit with a stale `params`.
+  const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false);
 
-  // Keep input synced with URL when user navigates by other means.
+  // Keep input synced with URL when user navigates by other means. Never while
+  // the box has focus: on the library page we push `q` into the URL ourselves
+  // (below), and that write comes back here one render later carrying whatever
+  // was typed 180ms ago. Applying it would rewind the caret — and mid-IME,
+  // corrupt the composition. While focused the input is the source of truth.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (composingRef.current) return;
+    if (document.activeElement === inputRef.current) return;
     setQ(params.get("q") ?? "");
   }, [params]);
 
   // Debounced fetch.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Half-finished romaji ("konnichiha" on the way to こんにちは) matches
+    // nothing and just burns requests. Wait for the commit.
+    if (composing) return;
     const trimmed = q.trim();
     if (!trimmed) {
       /* eslint-disable react-hooks/set-state-in-effect */
@@ -112,7 +128,7 @@ export function SearchBar() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [q]);
+  }, [q, composing]);
 
   // While on the library page, mirror q into the URL (debounced) so the grid
   // filters live as the user types. Skip elsewhere — typing in search on a
@@ -120,6 +136,7 @@ export function SearchBar() {
   useEffect(() => {
     if (pathname !== "/") return;
     if (urlSyncRef.current) clearTimeout(urlSyncRef.current);
+    if (composing) return;
     const trimmed = q.trim();
     const current = params.get("q") ?? "";
     if (trimmed === current) return;
@@ -135,7 +152,7 @@ export function SearchBar() {
     return () => {
       if (urlSyncRef.current) clearTimeout(urlSyncRef.current);
     };
-  }, [q, pathname, params, router]);
+  }, [q, composing, pathname, params, router]);
 
   // Close on outside click.
   useEffect(() => {
@@ -185,9 +202,27 @@ export function SearchBar() {
               ref={inputRef}
               suppressHydrationWarning
               placeholder={t("search.placeholder")}
-              className={cn("pl-9", (pending || loading) && "pr-8")}
+              // pr-8 is reserved even with no spinner: toggling it mid-typing
+              // resizes the content box, and a value long enough to scroll
+              // visibly lurches sideways when that happens.
+              className="pl-9 pr-8"
               onFocus={() => setOpen(true)}
+              onCompositionStart={() => {
+                composingRef.current = true;
+                setComposing(true);
+              }}
+              onCompositionEnd={(e) => {
+                composingRef.current = false;
+                setComposing(false);
+                // Chrome fires the final `input` event before compositionend,
+                // Safari after. Reading the element covers both, so the
+                // committed text is never dropped.
+                setQ(e.currentTarget.value);
+              }}
               onKeyDown={(e) => {
+                // Enter that closes an IME candidate window carries
+                // keyCode 229 / isComposing; it must not submit the search.
+                if (e.nativeEvent.isComposing) return;
                 if (e.key === "Enter") {
                   // If cmdk has a highlighted item, it dispatches onSelect already.
                   // Fall back to free-text submit on Enter when nothing is selected.
