@@ -37,7 +37,6 @@ export const en = {
   "header.scanDurationsHint": "missing only",
   "header.rescanDurations": "Re-scan all durations",
   "header.rescanDurationsHint": "every track",
-  "header.toggleTheme": "Toggle theme",
   "header.showNsfw": "Show R18 covers",
   "header.blurNsfw": "Blur R18 covers",
   "header.nsfwBlurred": "R18 covers: blurred",
@@ -191,16 +190,30 @@ export const en = {
     "Language of the interface. Work titles, tags and voice actor names always show as they were imported.",
   "settings.language.group": "Interface language",
 
-  // ── Settings: player ──────────────────────────────────────────────────────
-  "settings.player.title": "Player seek bar",
-  "settings.player.description":
-    "Applies to this device only. Waveforms are generated once per track with ffmpeg and then cached, so the first play of a long file may show a plain bar for a few seconds.",
-  "settings.player.group": "Seek bar style",
-  "settings.player.bar": "Classic bar",
-  "settings.player.barHint": "A thin progress line along the top edge of the player.",
-  "settings.player.waveform": "Waveform",
-  "settings.player.waveformHint":
+  // ── Settings: appearance ──────────────────────────────────────────────────
+  "settings.appearance.title": "Appearance",
+  "settings.appearance.description":
+    "How this device draws the app. These preferences are stored in the browser, so each device keeps its own.",
+  "settings.appearance.theme": "Theme",
+  "settings.appearance.themeHint":
+    "System follows whatever your device is set to, and switches with it.",
+  "settings.appearance.themeGroup": "Colour theme",
+  "settings.appearance.themeLight": "Light",
+  "settings.appearance.themeDark": "Dark",
+  "settings.appearance.themeSystem": "System",
+  "settings.appearance.seekbar": "Player seek bar",
+  "settings.appearance.seekbarHint":
+    "Waveforms are generated once per track with ffmpeg and then cached, so the first play of a long file may show a plain bar for a few seconds.",
+  "settings.appearance.seekbarGroup": "Seek bar style",
+  "settings.appearance.bar": "Classic bar",
+  "settings.appearance.barHint": "A thin progress line along the top edge of the player.",
+  "settings.appearance.waveform": "Waveform",
+  "settings.appearance.waveformHint":
     "Shows the track’s loudness so you can see pauses and peaks before you scrub.",
+  "settings.appearance.libraryCards": "Library cards",
+  "settings.appearance.hideTags": "Hide tags on library cards",
+  "settings.appearance.hideTagsHint":
+    "Voice actor chips stay. Tags remain on the work page and in the filter panel.",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite proxy",
@@ -367,7 +380,6 @@ export const ja: Record<TranslationKey, string> = {
   "header.scanDurationsHint": "未取得のみ",
   "header.rescanDurations": "再生時間をすべて再スキャン",
   "header.rescanDurationsHint": "すべてのトラック",
-  "header.toggleTheme": "テーマを切り替え",
   "header.showNsfw": "R18カバーを表示",
   "header.blurNsfw": "R18カバーをぼかす",
   "header.nsfwBlurred": "R18カバー：ぼかし中",
@@ -523,16 +535,30 @@ export const ja: Record<TranslationKey, string> = {
     "インターフェースの表示言語です。作品タイトル・ジャンル・声優名は取り込んだままの表記で表示されます。",
   "settings.language.group": "表示言語",
 
-  // ── Settings: player ──────────────────────────────────────────────────────
-  "settings.player.title": "プレーヤーのシークバー",
-  "settings.player.description":
-    "この端末にのみ適用されます。波形はトラックごとにffmpegで一度だけ生成してキャッシュするため、長いファイルの初回再生では数秒間バー表示になることがあります。",
-  "settings.player.group": "シークバーの種類",
-  "settings.player.bar": "クラシックバー",
-  "settings.player.barHint": "プレーヤー上端に沿った細い進行ラインです。",
-  "settings.player.waveform": "波形",
-  "settings.player.waveformHint":
+  // ── Settings: appearance ──────────────────────────────────────────────────
+  "settings.appearance.title": "外観",
+  "settings.appearance.description":
+    "この端末での表示方法です。設定はブラウザに保存されるため、端末ごとに個別に保持されます。",
+  "settings.appearance.theme": "テーマ",
+  "settings.appearance.themeHint":
+    "「システム」は端末の設定に従い、切り替わると一緒に変わります。",
+  "settings.appearance.themeGroup": "配色テーマ",
+  "settings.appearance.themeLight": "ライト",
+  "settings.appearance.themeDark": "ダーク",
+  "settings.appearance.themeSystem": "システム",
+  "settings.appearance.seekbar": "プレーヤーのシークバー",
+  "settings.appearance.seekbarHint":
+    "波形はトラックごとにffmpegで一度だけ生成してキャッシュするため、長いファイルの初回再生では数秒間バー表示になることがあります。",
+  "settings.appearance.seekbarGroup": "シークバーの種類",
+  "settings.appearance.bar": "クラシックバー",
+  "settings.appearance.barHint": "プレーヤー上端に沿った細い進行ラインです。",
+  "settings.appearance.waveform": "波形",
+  "settings.appearance.waveformHint":
     "トラックの音量を表示するので、シークする前に無音部分や盛り上がりが分かります。",
+  "settings.appearance.libraryCards": "ライブラリのカード",
+  "settings.appearance.hideTags": "ライブラリのカードでジャンルを非表示にする",
+  "settings.appearance.hideTagsHint":
+    "声優のチップはそのまま表示されます。ジャンルは作品ページと絞り込みパネルには残ります。",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsiteプロキシ",

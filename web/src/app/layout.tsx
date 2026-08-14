@@ -49,7 +49,7 @@ export default async function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('nsfw:blur')==='1')document.documentElement.classList.add('nsfw-blur')}catch(e){}`,
+            __html: `try{var d=document.documentElement;if(localStorage.getItem('nsfw:blur')==='1')d.classList.add('nsfw-blur');if(localStorage.getItem('library:hide-tags')==='1')d.classList.add('hide-card-tags')}catch(e){}`,
           }}
         />
       </head>

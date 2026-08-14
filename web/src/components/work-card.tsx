@@ -72,7 +72,8 @@ export function WorkCard({ work }: { work: WorkSummary }) {
           </div>
         )}
         {tagShown.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          // Hidden by CSS when the appearance setting is on; see globals.css.
+          <div data-work-tags className="flex flex-wrap gap-1">
             {tagShown.map((t) => (
               <Link
                 key={t.id}

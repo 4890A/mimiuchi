@@ -146,6 +146,12 @@
     filter: none;
   }
 
+  /* Appearance setting: drop the tag chips off library cards. Voice-actor
+     chips are a separate row and stay visible. */
+  html.hide-card-tags [data-work-tags] {
+    display: none;
+  }
+
   .on-deck-scroller {
     scrollbar-width: none;
     -ms-overflow-style: none;

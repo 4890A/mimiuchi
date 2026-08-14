@@ -27,7 +27,7 @@ import {
 import { useScanProgress } from "@/components/scan-progress";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
-import { PlayerSettings } from "./player-settings";
+import { AppearanceSettings } from "./appearance-settings";
 import { LanguageSettings } from "./language-settings";
 
 interface Settings {
@@ -122,8 +122,8 @@ export function SettingsForm({
       {/* Language */}
       <LanguageSettings />
 
-      {/* Player */}
-      <PlayerSettings />
+      {/* Appearance */}
+      <AppearanceSettings />
 
       {/* Proxy */}
       <Card>

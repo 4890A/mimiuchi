@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Heart, Library, RefreshCw, Mic2, RotateCw, Settings as SettingsIcon, Timer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { NsfwBlurToggle } from "@/components/nsfw-blur-toggle";
 import { SearchBar } from "@/components/search-bar";
 import { cn } from "@/lib/utils";
@@ -118,7 +117,6 @@ export function TopNav() {
           <SettingsIcon className="h-5 w-5" />
         </Link>
         <NsfwBlurToggle />
-        <ThemeToggle />
       </div>
       {scan.panel}
       <nav className="flex items-center gap-1 border-t px-3 py-1.5 sm:hidden">
