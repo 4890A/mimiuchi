@@ -116,7 +116,10 @@ export function OnDeck({
                 </Badge>
               )}
               <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/70 to-transparent" />
-              <p className="absolute inset-x-2 bottom-1.5 line-clamp-2 text-xs font-medium text-white drop-shadow">
+              <p
+                title={w.title}
+                className="absolute inset-x-2 bottom-1.5 line-clamp-2 text-xs font-medium text-white drop-shadow"
+              >
                 {w.title}
               </p>
             </div>

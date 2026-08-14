@@ -36,7 +36,10 @@ export function WorkCard({ work }: { work: WorkSummary }) {
         )}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
         <div className="absolute inset-x-2 bottom-2 text-white">
-          <p className="line-clamp-2 text-sm font-medium drop-shadow">
+          <p
+            title={work.title}
+            className="line-clamp-2 text-sm font-medium drop-shadow"
+          >
             {work.title}
           </p>
         </div>
