@@ -25,6 +25,10 @@ export const BACKUP_VERSION = 1;
 /**
  * Import order. Parents before children so foreign keys resolve, and it
  * doubles as the export order so a backup reads top-down.
+ *
+ * `track_waveforms` is deliberately absent: the caches are regenerable from
+ * the audio with ffmpeg, and they dominate the size of a backup. Older
+ * backups that carry the table are accepted, but the rows are ignored.
  */
 export const BACKUP_TABLES = [
   "circles",
@@ -36,7 +40,6 @@ export const BACKUP_TABLES = [
   "tracks",
   "likes",
   "track_progress",
-  "track_waveforms",
   "settings",
 ] as const;
 
@@ -64,16 +67,9 @@ export interface RestoreSummary {
   errors: string[];
 }
 
-export interface ExportOptions {
-  /** Waveform caches are regenerable; excluding them shrinks the file a lot. */
-  includeWaveforms?: boolean;
-}
-
 export interface RestoreOptions {
   /** Run the whole import, then roll back instead of committing. */
   dryRun?: boolean;
-  /** Skip the `track_waveforms` table even if the backup carries it. */
-  includeWaveforms?: boolean;
 }
 
 /** Thrown for backups we refuse before touching the database. */
@@ -180,13 +176,6 @@ export function dumpTable(table: BackupTableName): BackupRow[] {
   });
 }
 
-function tablesToDump(options: ExportOptions): BackupTableName[] {
-  const includeWaveforms = options.includeWaveforms ?? true;
-  return BACKUP_TABLES.filter(
-    (t) => includeWaveforms || t !== "track_waveforms",
-  );
-}
-
 interface CoverEntry {
   /** Basename as stored in the backup, e.g. "RJ01000380.jpg". */
   name: string;
@@ -219,13 +208,12 @@ function collectCoverEntries(): CoverEntry[] {
   return entries;
 }
 
-function backupHeader(options: ExportOptions) {
+function backupHeader() {
   return {
     version: BACKUP_VERSION,
     schemaVersion: currentSchemaVersion(),
     createdAt: new Date().toISOString(),
     appVersion: appVersion(),
-    includeWaveforms: options.includeWaveforms ?? true,
   };
 }
 
@@ -235,13 +223,10 @@ function backupHeader(options: ExportOptions) {
  * Fine for the CLI and for tests; the HTTP route uses {@link streamBackup}
  * instead so a library's worth of base64 covers never lands in one string.
  */
-export async function createBackup(
-  options: ExportOptions = {},
-): Promise<BackupData> {
-  const header = backupHeader(options);
+export async function createBackup(): Promise<BackupData> {
+  const header = backupHeader();
   const data = {} as BackupTables;
-  for (const table of BACKUP_TABLES) data[table] = [];
-  for (const table of tablesToDump(options)) data[table] = dumpTable(table);
+  for (const table of BACKUP_TABLES) data[table] = dumpTable(table);
 
   const covers: Record<string, string> = {};
   for (const entry of collectCoverEntries()) {
@@ -269,11 +254,8 @@ export async function createBackup(
  * Emits the same JSON as {@link createBackup}, one table (and one cover) at a
  * time, so the response body can be streamed without buffering the library.
  */
-export async function* streamBackup(
-  options: ExportOptions = {},
-): AsyncGenerator<string> {
-  const header = backupHeader(options);
-  const include = new Set(tablesToDump(options));
+export async function* streamBackup(): AsyncGenerator<string> {
+  const header = backupHeader();
 
   yield `{"version":${JSON.stringify(header.version)},`;
   yield `"schemaVersion":${JSON.stringify(header.schemaVersion)},`;
@@ -283,7 +265,7 @@ export async function* streamBackup(
 
   let first = true;
   for (const table of BACKUP_TABLES) {
-    const rows = include.has(table) ? dumpTable(table) : [];
+    const rows = dumpTable(table);
     yield `${first ? "" : ","}${JSON.stringify(table)}:${JSON.stringify(rows)}`;
     first = false;
   }
@@ -569,7 +551,6 @@ export async function restoreBackup(
   const libraryRoots = resolveLibraryRoots(settings.libraryRoots);
   const coversDir = resolveCoversDir(settings.coversDir);
   const covers = data.covers ?? {};
-  const includeWaveforms = options.includeWaveforms ?? true;
 
   if (data.schemaVersion > currentSchemaVersion()) {
     summary.warnings.push(
@@ -592,7 +573,6 @@ export async function restoreBackup(
       const rows = data.data[table] ?? [];
       summary.imported[table] = 0;
       if (rows.length === 0) continue;
-      if (table === "track_waveforms" && !includeWaveforms) continue;
 
       const columns = getTableColumnInfo(table);
       if (!columns) {

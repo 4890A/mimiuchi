@@ -262,10 +262,7 @@ export const en = {
   // ── Backup ────────────────────────────────────────────────────────────────
   "backup.title": "Backup",
   "backup.description":
-    "Export library metadata, play progress, likes, bookmarks and cover images to a single JSON file. Audio files are not included.",
-  "backup.includeWaveforms": "Include waveform data",
-  "backup.waveformsHint":
-    "Waveforms are regenerable from the audio — leaving them out makes a much smaller file.",
+    "Export library metadata, play progress, likes, bookmarks and cover images to a single JSON file. Audio files and waveform caches are not included — waveforms are regenerated from the audio as you play.",
   "backup.download": "Download backup",
   "backup.started": "Backup started — check your downloads",
 
@@ -297,7 +294,6 @@ export const en = {
   "restore.row.tracks": "Tracks",
   "restore.row.likes": "Likes",
   "restore.row.progress": "Progress",
-  "restore.row.waveforms": "Waveforms",
   "restore.row.settings": "Settings",
   "restore.row.covers": "Covers",
 
@@ -611,10 +607,7 @@ export const ja: Record<TranslationKey, string> = {
   // ── Backup ────────────────────────────────────────────────────────────────
   "backup.title": "バックアップ",
   "backup.description":
-    "ライブラリのメタデータ、再生位置、お気に入り、ブックマーク、カバー画像を1つのJSONファイルに書き出します。音声ファイルは含まれません。",
-  "backup.includeWaveforms": "波形データを含める",
-  "backup.waveformsHint":
-    "波形は音声から再生成できます。含めないとファイルがかなり小さくなります。",
+    "ライブラリのメタデータ、再生位置、お気に入り、ブックマーク、カバー画像を1つのJSONファイルに書き出します。音声ファイルと波形キャッシュは含まれません（波形は再生時に音声から再生成されます）。",
   "backup.download": "バックアップをダウンロード",
   "backup.started": "バックアップを開始しました — ダウンロードを確認してください",
 
@@ -646,7 +639,6 @@ export const ja: Record<TranslationKey, string> = {
   "restore.row.tracks": "トラック",
   "restore.row.likes": "お気に入り",
   "restore.row.progress": "再生位置",
-  "restore.row.waveforms": "波形",
   "restore.row.settings": "設定",
   "restore.row.covers": "カバー",
 

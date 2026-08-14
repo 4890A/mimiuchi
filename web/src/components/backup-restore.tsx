@@ -42,7 +42,6 @@ const ROWS: Array<[string, TranslationKey]> = [
   ["tracks", "restore.row.tracks"],
   ["likes", "restore.row.likes"],
   ["track_progress", "restore.row.progress"],
-  ["track_waveforms", "restore.row.waveforms"],
   ["settings", "restore.row.settings"],
   ["covers", "restore.row.covers"],
 ];
@@ -52,7 +51,6 @@ export function BackupRestore() {
   const { t } = useTranslations();
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const [includeWaveforms, setIncludeWaveforms] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
@@ -66,7 +64,7 @@ export function BackupRestore() {
     // Navigating rather than fetching lets the browser stream the response
     // straight to disk — a full library is far too big to hold as a Blob.
     const link = document.createElement("a");
-    link.href = `/api/backup/export?includeWaveforms=${includeWaveforms}`;
+    link.href = "/api/backup/export";
     link.download = "";
     document.body.appendChild(link);
     link.click();
@@ -132,18 +130,6 @@ export function BackupRestore() {
           <CardDescription>{t("backup.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={includeWaveforms}
-              onChange={(e) => setIncludeWaveforms(e.target.checked)}
-              className="h-4 w-4"
-            />
-            {t("backup.includeWaveforms")}
-          </label>
-          <p className="text-xs text-muted-foreground">
-            {t("backup.waveformsHint")}
-          </p>
           <Button onClick={download} disabled={downloading}>
             {downloading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

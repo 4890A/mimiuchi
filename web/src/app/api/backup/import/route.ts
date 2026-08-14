@@ -20,7 +20,6 @@ export async function POST(req: Request) {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "true";
-  const includeWaveforms = url.searchParams.get("includeWaveforms") !== "false";
 
   let text: string;
   try {
@@ -65,6 +64,6 @@ export async function POST(req: Request) {
     throw err;
   }
 
-  const summary = await restoreBackup(parsed, { dryRun, includeWaveforms });
+  const summary = await restoreBackup(parsed, { dryRun });
   return NextResponse.json(summary);
 }

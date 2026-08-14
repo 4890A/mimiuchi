@@ -4,38 +4,33 @@ import { createBackup } from "../src/lib/backup";
 
 function usage(): never {
   console.error(
-    `Usage: tsx --tsconfig scripts/tsconfig.json scripts/backup.ts --output <file> [--no-waveforms]`,
+    `Usage: tsx --tsconfig scripts/tsconfig.json scripts/backup.ts --output <file>`,
   );
   process.exit(1);
 }
 
 function parseArgs(argv: string[]) {
   let output: string | undefined;
-  let includeWaveforms = true;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--output" || arg === "-o") {
       output = argv[++i];
     } else if (arg.startsWith("--output=")) {
       output = arg.slice("--output=".length);
-    } else if (arg === "--no-waveforms") {
-      includeWaveforms = false;
     } else {
       console.error(`Unknown argument: ${arg}`);
       usage();
     }
   }
   if (!output) usage();
-  return { output, includeWaveforms };
+  return { output };
 }
 
 async function main() {
-  const { output, includeWaveforms } = parseArgs(process.argv.slice(2));
+  const { output } = parseArgs(process.argv.slice(2));
 
-  console.log(
-    `[backup] Exporting${includeWaveforms ? "" : " (without waveforms)"}...`,
-  );
-  const backup = await createBackup({ includeWaveforms });
+  console.log(`[backup] Exporting...`);
+  const backup = await createBackup();
 
   const dir = path.dirname(path.resolve(output));
   fs.mkdirSync(dir, { recursive: true });

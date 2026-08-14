@@ -8,7 +8,7 @@ import {
 
 function usage(): never {
   console.error(
-    `Usage: tsx --tsconfig scripts/tsconfig.json scripts/restore.ts <backup.json> [--dry-run] [--no-waveforms]`,
+    `Usage: tsx --tsconfig scripts/tsconfig.json scripts/restore.ts <backup.json> [--dry-run]`,
   );
   process.exit(1);
 }
@@ -16,10 +16,8 @@ function usage(): never {
 function parseArgs(argv: string[]) {
   let input: string | undefined;
   let dryRun = false;
-  let includeWaveforms = true;
   for (const arg of argv) {
     if (arg === "--dry-run") dryRun = true;
-    else if (arg === "--no-waveforms") includeWaveforms = false;
     else if (arg.startsWith("-")) {
       console.error(`Unknown argument: ${arg}`);
       usage();
@@ -27,11 +25,11 @@ function parseArgs(argv: string[]) {
     else usage();
   }
   if (!input) usage();
-  return { input, dryRun, includeWaveforms };
+  return { input, dryRun };
 }
 
 async function main() {
-  const { input, dryRun, includeWaveforms } = parseArgs(process.argv.slice(2));
+  const { input, dryRun } = parseArgs(process.argv.slice(2));
   const file = path.resolve(input);
   if (!fs.existsSync(file)) {
     console.error(`No such file: ${file}`);
@@ -56,10 +54,8 @@ async function main() {
     throw err;
   }
 
-  console.log(
-    `[restore] ${dryRun ? "Validating" : "Restoring"} ${file}${includeWaveforms ? "" : " (without waveforms)"}...`,
-  );
-  const summary = await restoreBackup(parsed, { dryRun, includeWaveforms });
+  console.log(`[restore] ${dryRun ? "Validating" : "Restoring"} ${file}...`);
+  const summary = await restoreBackup(parsed, { dryRun });
 
   for (const [table, count] of Object.entries(summary.imported)) {
     if (count > 0) console.log(`[restore]   ${table}: ${count}`);
