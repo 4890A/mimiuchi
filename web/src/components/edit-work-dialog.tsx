@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, X, Loader2, ImageUp } from "lucide-react";
+import { Pencil, X, Loader2, ImageUp, RefreshCw } from "lucide-react";
 import {
   updateWorkDetails,
   uploadWorkCover,
   setWorkCoverUrl,
+  refreshWorkMetadata,
 } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,6 +251,7 @@ export function EditWorkDialog({
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Reset the form to the current work whenever the dialog is (re)opened.
@@ -283,6 +285,34 @@ export function EditWorkDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     return () => URL.revokeObjectURL(url);
   }, [coverFile]);
+
+  /** Re-fetch this work from DLsite and drop the result into the form. The
+   *  action has already persisted it, so closing without saving keeps it. */
+  function refreshFromDlsite() {
+    setRefreshing(true);
+    startTransition(async () => {
+      const res = await refreshWorkMetadata(workId);
+      setRefreshing(false);
+      if (!res.ok) {
+        toast.error(t("edit.refreshFailed", { error: res.error }));
+        return;
+      }
+      const w = res.work;
+      setTitle(w.title);
+      setCircleName(w.circleName ?? "");
+      setReleaseDate(w.releaseDate ?? "");
+      setWorkType(w.workType ?? "");
+      setLanguage(w.language ?? "");
+      setDescription(w.description ?? "");
+      setNsfw(w.nsfw);
+      setVoiceActors(w.voiceActors);
+      setTags(w.tags);
+      setCoverFile(null);
+      setCoverUrl("");
+      toast.success(t("edit.refreshed"));
+      router.refresh();
+    });
+  }
 
   function save() {
     if (!title.trim()) {
@@ -347,7 +377,23 @@ export function EditWorkDialog({
       </DialogTrigger>
       <DialogContent className="scrollbar-hide max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
         <DialogHeader className="p-4 pb-2">
-          <DialogTitle>{t("edit.title")}</DialogTitle>
+          <div className="mr-7 flex items-center justify-between gap-3">
+            <DialogTitle>{t("edit.title")}</DialogTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={refreshFromDlsite}
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {refreshing ? t("edit.refreshing") : t("edit.refreshFromDlsite")}
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 px-4 pb-4">

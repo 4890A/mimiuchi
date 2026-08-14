@@ -17,6 +17,8 @@ import {
 } from "./db/schema";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache, listRandomWorks, type RecentWork } from "./db/queries";
+import { upsertWork } from "./db/repository";
+import { fetchMetadata, downloadCover } from "./metadata";
 import { getSettings } from "./settings";
 import { resolveCoversDir } from "./config";
 
@@ -169,6 +171,91 @@ export async function updateWorkDetails(
   revalidatePath(`/works/${workId}`);
   revalidatePath("/");
   return { ok: true };
+}
+
+/** The freshly fetched fields, shaped for the edit dialog's form state. */
+export interface RefreshedWorkMetadata {
+  title: string;
+  circleName: string | null;
+  releaseDate: string | null;
+  workType: string | null;
+  language: string | null;
+  description: string | null;
+  nsfw: boolean;
+  voiceActors: string[];
+  tags: string[];
+  coverUrl: string | null;
+}
+
+/** Re-fetch a single work from DLsite (HVDB as fallback) and overwrite its
+ *  stored details, tags, voice actors and cover — the same write the scanner
+ *  does with `forceMetadata`, minus the library walk. Local edits to that
+ *  work are lost, which is the point: it's the "undo my edits / pick up the
+ *  listing's changes" escape hatch. */
+export async function refreshWorkMetadata(
+  workId: string,
+): Promise<
+  { ok: true; work: RefreshedWorkMetadata } | { ok: false; error: string }
+> {
+  const row = db
+    .select({ folderPath: works.folderPath, coverPath: works.coverPath })
+    .from(works)
+    .where(eq(works.id, workId))
+    .get();
+  if (!row) return { ok: false, error: "work not found" };
+
+  let metadata;
+  try {
+    metadata = await fetchMetadata(workId);
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+  if (!metadata) return { ok: false, error: "no listing found" };
+
+  let coverPath: string | undefined;
+  if (metadata.coverUrl) {
+    try {
+      const coversDir = resolveCoversDir(getSettings().coversDir);
+      const ext = path.extname(new URL(metadata.coverUrl).pathname) || ".jpg";
+      const dest = path.join(coversDir, `${workId}${ext}`);
+      if (await downloadCover(metadata.coverUrl, dest)) {
+        coverPath = dest;
+        // A previous cover with a different extension would be orphaned.
+        if (row.coverPath && path.resolve(row.coverPath) !== path.resolve(dest)) {
+          try {
+            fs.rmSync(row.coverPath, { force: true });
+          } catch {
+            // best-effort cleanup of the superseded file
+          }
+        }
+      }
+    } catch {
+      // bad cover URL or unwritable covers dir; keep the metadata anyway
+    }
+  }
+
+  upsertWork({ id: workId, folderPath: row.folderPath, metadata, coverPath });
+
+  invalidateSearchIndex();
+  invalidateFilterListCache();
+  revalidatePath(`/works/${workId}`);
+  revalidatePath("/");
+
+  return {
+    ok: true,
+    work: {
+      title: metadata.title,
+      circleName: metadata.circleName ?? null,
+      releaseDate: metadata.releaseDate ?? null,
+      workType: metadata.workType ?? null,
+      language: metadata.language ?? null,
+      description: metadata.description ?? null,
+      nsfw: metadata.nsfw ?? false,
+      voiceActors: metadata.voiceActors.map((va) => va.name),
+      tags: metadata.tags.map((t) => t.name),
+      coverUrl: metadata.coverUrl ?? null,
+    },
+  };
 }
 
 const COVER_EXT: Record<string, string> = {
