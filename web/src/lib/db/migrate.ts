@@ -32,7 +32,38 @@ export function runMigrations(
   }
 
   baselineLegacyDatabase(sqlite);
-  migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  migrateWhenUnlocked(db);
+}
+
+/**
+ * Runs the migrator, retrying while another process holds the write lock.
+ *
+ * `busy_timeout` does not cover this case. The migrator reads
+ * `__drizzle_migrations` and only then issues a deferred `BEGIN`, so its first
+ * write is a read-to-write upgrade — and SQLite fails those with SQLITE_BUSY
+ * immediately rather than waiting, since waiting could deadlock two readers.
+ * Retrying is safe and usually terminates on the second attempt: once the
+ * process that won has committed, we re-read its bookkeeping and find there is
+ * nothing left to apply.
+ */
+function migrateWhenUnlocked(db: BetterSQLite3Database<typeof schema>): void {
+  const deadline = Date.now() + 30_000;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+      return;
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code !== "SQLITE_BUSY" && code !== "SQLITE_BUSY_SNAPSHOT") throw err;
+      if (Date.now() >= deadline) throw err;
+      sleep(Math.min(50 * 2 ** attempt, 1_000));
+    }
+  }
+}
+
+/** Blocking sleep — this whole path is synchronous, and runs once per process. */
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function baselineLegacyDatabase(sqlite: Database.Database): void {
