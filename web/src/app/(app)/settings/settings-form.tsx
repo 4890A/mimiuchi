@@ -330,7 +330,16 @@ function ScanRow({
         </div>
         <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
-      <Button variant="outline" size="sm" onClick={onClick} disabled={disabled}>
+      {/* Every row's button reads "Run"; the label that says which scan it
+          runs is the sibling above. Name the button after its row so it is
+          distinguishable to a screen reader (and to a test). */}
+      <Button
+        variant="outline"
+        size="sm"
+        aria-label={t(labelKey)}
+        onClick={onClick}
+        disabled={disabled}
+      >
         {t("common.run")}
       </Button>
     </div>
