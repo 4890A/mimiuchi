@@ -68,16 +68,46 @@ Edit `web/.env.local` and set the variables below.
 
 All commands run from the `web/` directory.
 
+### Normal use
+
+Build once, then start the server. This is the mode to use day to day: an
+optimized build, without the dev server's hot reloading, source maps, and
+verbose console output.
+
 ```bash
-pnpm dev            # start the dev server on http://localhost:3000
+pnpm build          # compile the app
+pnpm start          # serve it on http://localhost:3000
 ```
 
-For production:
+The server runs in the foreground until you stop it with `Ctrl-C`. It serves
+whatever `pnpm build` last produced, so re-run `pnpm build` after pulling or
+editing code — a running server won't pick the changes up on its own.
+
+To use a different port, pass `-p` (or set `PORT`):
 
 ```bash
-pnpm build
-pnpm start
+pnpm start -p 3001
 ```
+
+`pnpm start` listens on `0.0.0.0`, so the app is reachable from phones and
+other machines on your network at `http://<your-machine-ip>:3000` without any
+extra configuration. Nothing here starts on boot by itself — wrap `pnpm start`
+in whatever your OS uses to keep services alive (a systemd unit, a Windows
+scheduled task, pm2) if you want it always available.
+
+### Development
+
+```bash
+pnpm dev            # dev server with hot reloading, on http://localhost:3000
+```
+
+Use this only while working on the code — it recompiles on every change and
+logs far more, which makes it noticeably slower to browse.
+
+> Hitting the **dev** server from another device also needs that device's IP in
+> `allowedDevOrigins` in `web/next.config.ts`. Without it Next.js blocks the
+> page's JavaScript from taking over, and the app renders but every button is
+> dead. `pnpm start` has no such restriction.
 
 The database is created and migrated automatically on first connection — a
 fresh checkout provisions an empty database on startup, so there's no manual
