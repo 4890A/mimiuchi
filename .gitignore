@@ -5,6 +5,7 @@ node_modules/
 
 # next.js
 .next/
+.next-e2e/
 out/
 next-env.d.ts
 
@@ -31,6 +32,13 @@ covers/
 .playwright-cli/
 playwright-report/
 test-results/
+# Kept even though web/e2e/ is ignored below: .auth/state.json holds a signed
+# session cookie and must stay out of the repo if the suite is ever tracked.
+web/e2e/.auth/
+
+# browser automation suite (kept local, not committed)
+web/e2e/
+web/playwright.config.ts
 
 # logs
 npm-debug.log*
