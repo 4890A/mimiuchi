@@ -97,6 +97,9 @@ export const en = {
   "liked.trackCount": "{count} tracks",
   "liked.trackCount_one": "1 track",
   "liked.empty": "Tap the heart icon on any track to add it here.",
+  "liked.shuffle": "Shuffle",
+  "liked.shuffleOn": "Shuffle the order",
+  "liked.shuffleOff": "Back to the original order",
 
   // ── Seiyuu page ───────────────────────────────────────────────────────────
   "seiyuu.title": "Seiyuu",
@@ -424,6 +427,9 @@ export const ja: Record<TranslationKey, string> = {
   "liked.trackCount": "{count}件のトラック",
   "liked.trackCount_one": "1件のトラック",
   "liked.empty": "トラックのハートアイコンを押すと、ここに追加されます。",
+  "liked.shuffle": "シャッフル",
+  "liked.shuffleOn": "順番をシャッフル",
+  "liked.shuffleOff": "元の順番に戻す",
 
   // ── Seiyuu page ───────────────────────────────────────────────────────────
   "seiyuu.title": "声優",
