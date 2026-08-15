@@ -4,8 +4,12 @@ node_modules/
 .pnp.*
 
 # next.js
+# The wildcard is not just tidiness: `distDir` is settable per-run via
+# KIKOERU_DIST_DIR, and Tailwind's source scanner skips gitignored paths only.
+# A build directory that slips through gets walked as source, and Turbopack's
+# binary cache yields mangled class candidates that break the CSS build.
 .next/
-.next-e2e/
+.next-*/
 out/
 next-env.d.ts
 
