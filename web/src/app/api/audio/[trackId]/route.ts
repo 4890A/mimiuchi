@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import fs from "node:fs";
-import { Readable } from "node:stream";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { tracks, works } from "@/lib/db/schema";
+import { fileStream } from "@/lib/file-stream";
 
 const MIME: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -54,7 +54,7 @@ export async function GET(
 
   if (!range) {
     const stream = fs.createReadStream(filePath);
-    return new NextResponse(Readable.toWeb(stream) as unknown as ReadableStream, {
+    return new NextResponse(fileStream(stream, req.signal), {
       status: 200,
       headers: {
         "Content-Type": contentType,
@@ -77,7 +77,7 @@ export async function GET(
   }
   const chunkSize = end - start + 1;
   const stream = fs.createReadStream(filePath, { start, end });
-  return new NextResponse(Readable.toWeb(stream) as unknown as ReadableStream, {
+  return new NextResponse(fileStream(stream, req.signal), {
     status: 206,
     headers: {
       "Content-Type": contentType,

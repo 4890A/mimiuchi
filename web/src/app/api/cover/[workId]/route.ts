@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import fs from "node:fs";
-import { Readable } from "node:stream";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { works } from "@/lib/db/schema";
+import { fileStream } from "@/lib/file-stream";
 
 const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -48,9 +48,7 @@ export async function GET(
   }
 
   return new NextResponse(
-    Readable.toWeb(
-      fs.createReadStream(row.coverPath),
-    ) as unknown as ReadableStream,
+    fileStream(fs.createReadStream(row.coverPath), req.signal),
     {
       headers: {
         ...cacheHeaders,
