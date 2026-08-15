@@ -8,6 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { isNearEnd, resumePosition } from "@/lib/resume";
+import { getResumeMode } from "./player-prefs";
 
 export interface QueueTrack {
   id: number;
@@ -17,6 +19,8 @@ export interface QueueTrack {
   coverSrc: string;
   durationSeconds?: number | null;
   initialPosition?: number;
+  /** Set once the track has been played through to the end. */
+  completed?: boolean;
 }
 
 interface PlayerState {
@@ -39,8 +43,9 @@ interface PlayerActions {
   setVolume: (v: number) => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   _setTime: (t: number) => void;
-  _setDuration: (d: number) => void;
+  _onLoadedMetadata: (d: number) => void;
   _setIsPlaying: (p: boolean) => void;
+  _onEnded: () => void;
 }
 
 const PlayerContext = createContext<(PlayerState & PlayerActions) | null>(null);
@@ -62,19 +67,48 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // RSC snapshot of `track.initialPosition` becomes stale the moment the user
   // plays anything, so when the same trackId is loaded again we prefer this.
   const sessionPosRef = useRef<Map<number, number>>(new Map());
+  // The track whose `ended` we just handled. Its final state is already
+  // persisted, so the flush on the way out must not write over it.
+  const endedIdRef = useRef<number | null>(null);
+  // Position the currently loading src was asked to start at, kept so that
+  // `loadedmetadata` can re-judge it against the file's real duration.
+  const pendingStartRef = useRef(0);
 
   const current = currentIndex >= 0 ? (queue[currentIndex] ?? null) : null;
 
   const loadedIdRef = useRef<number | null>(null);
 
-  function saveProgressFor(trackId: number, positionSeconds: number) {
+  function saveProgressFor(
+    trackId: number,
+    positionSeconds: number,
+    completed = false,
+  ) {
     sessionPosRef.current.set(trackId, positionSeconds);
-    const body = JSON.stringify({ trackId, positionSeconds });
+    const body = JSON.stringify({ trackId, positionSeconds, completed });
     void fetch("/api/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
       keepalive: true,
+    });
+  }
+
+  /**
+   * Where this track should start. A saved position sitting in the tail of the
+   * track means it was heard to the end, and seeking there would fire `ended`
+   * at once — the queue would skip straight past it (and past every finished
+   * track after it), which is the whole reason this goes through
+   * `resumePosition` rather than using the stored number directly.
+   */
+  function startPositionFor(track: QueueTrack): number {
+    const sessionPos = sessionPosRef.current.get(track.id);
+    return resumePosition({
+      position: sessionPos ?? track.initialPosition ?? 0,
+      duration: track.durationSeconds,
+      // A position banked this session supersedes the page-load `completed`
+      // snapshot: if the track was restarted since, it is no longer finished.
+      completed: sessionPos === undefined && (track.completed ?? false),
+      mode: getResumeMode(),
     });
   }
 
@@ -86,15 +120,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // since changing src clears currentTime.
       const priorId = loadedIdRef.current;
       const priorPos = audio.currentTime;
-      if (priorId !== null && Number.isFinite(priorPos)) {
+      if (
+        priorId !== null &&
+        priorId !== endedIdRef.current &&
+        Number.isFinite(priorPos)
+      ) {
         saveProgressFor(priorId, priorPos);
       }
-      const sessionPos = sessionPosRef.current.get(track.id);
-      const startAt = sessionPos ?? track.initialPosition ?? 0;
+      endedIdRef.current = null;
+      const startAt = startPositionFor(track);
       audio.src = audioUrl(track.id);
       audio.currentTime = startAt;
       loadedIdRef.current = track.id;
       lastSavedRef.current = startAt;
+      pendingStartRef.current = startAt;
     }
     audio.play().catch(() => setIsPlaying(false));
   }, []);
@@ -157,8 +196,60 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [queue, loadAndPlay]);
 
   const seek = useCallback((seconds: number) => {
+    // The user has picked a position, so there is nothing left to second-guess
+    // once metadata arrives.
+    pendingStartRef.current = 0;
     if (audioRef.current) audioRef.current.currentTime = seconds;
     setCurrentTime(seconds);
+  }, []);
+
+  /**
+   * `loadedmetadata` is the first point at which the real length of the file is
+   * known. Tracks whose duration was never scanned reach `startPositionFor`
+   * with nothing to measure the tail against, so re-run the check here: without
+   * it the element sits at the end of the file and fires `ended` immediately.
+   */
+  const _onLoadedMetadata = useCallback((audioDuration: number) => {
+    setDuration(audioDuration || 0);
+    const startedAt = pendingStartRef.current;
+    pendingStartRef.current = 0;
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (startedAt > 0 && isNearEnd(startedAt, audioDuration)) {
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      lastSavedRef.current = 0;
+    }
+  }, []);
+
+  /**
+   * Playing out to the end records the track as finished at position zero, so
+   * that coming back to it starts it over instead of landing on the end again.
+   * The `completed` flag is what track rows use to stop drawing a progress bar.
+   */
+  const _onEnded = useCallback(() => {
+    const trackId = loadedIdRef.current;
+    if (trackId !== null) {
+      endedIdRef.current = trackId;
+      lastSavedRef.current = 0;
+      saveProgressFor(trackId, 0, true);
+    }
+    if (currentIndex + 1 < queue.length) {
+      next();
+      return;
+    }
+    // Last track in the queue: rewind rather than leave the element parked on
+    // the end, where pressing play would just fire `ended` again.
+    if (audioRef.current) audioRef.current.currentTime = 0;
+    setCurrentTime(0);
+    setIsPlaying(false);
+  }, [currentIndex, queue.length, next]);
+
+  const _setIsPlaying = useCallback((playing: boolean) => {
+    // Playing again means the track is no longer parked on the finished state
+    // `ended` persisted, so a later flush should record wherever it gets to.
+    if (playing) endedIdRef.current = null;
+    setIsPlaying(playing);
   }, []);
 
   const setVolume = useCallback((v: number) => {
@@ -170,9 +261,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio || !current) return;
     if (loadedIdRef.current !== current.id) {
+      const startAt = startPositionFor(current);
       audio.src = audioUrl(current.id);
-      audio.currentTime = current.initialPosition ?? 0;
+      audio.currentTime = startAt;
       loadedIdRef.current = current.id;
+      lastSavedRef.current = startAt;
+      pendingStartRef.current = startAt;
       if (isPlaying) audio.play().catch(() => setIsPlaying(false));
     }
   }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -246,6 +340,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const trackId = current.id;
 
     function saveNow(useBeacon = false) {
+      // `ended` already wrote this track's final state (position 0, completed);
+      // the `pause` that some browsers fire alongside it would otherwise put
+      // the end position straight back.
+      if (audioRef.current?.ended) return;
       const t = audioRef.current?.currentTime ?? 0;
       if (t === lastSavedRef.current) return;
       lastSavedRef.current = t;
@@ -311,8 +409,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setVolume,
       audioRef,
       _setTime: setCurrentTime,
-      _setDuration: setDuration,
-      _setIsPlaying: setIsPlaying,
+      _onLoadedMetadata,
+      _setIsPlaying,
+      _onEnded,
     }),
     [
       queue,
@@ -329,6 +428,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       previous,
       seek,
       setVolume,
+      _onLoadedMetadata,
+      _setIsPlaying,
+      _onEnded,
     ],
   );
 

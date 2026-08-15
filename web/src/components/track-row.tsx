@@ -152,6 +152,7 @@ export function TrackList({
     coverSrc,
     durationSeconds: t.durationSeconds,
     initialPosition: t.progress?.positionSeconds ?? 0,
+    completed: t.progress?.completed ?? false,
   }));
 
   function renderTrack(t: TrackWithProgress, queueIndex: number, displayNumber: number) {

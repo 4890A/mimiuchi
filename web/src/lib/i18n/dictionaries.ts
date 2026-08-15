@@ -219,6 +219,21 @@ export const en = {
   "settings.appearance.hideTagsHint":
     "Voice actor chips stay. Tags remain on the work page and in the filter panel.",
 
+  // ── Settings: playback ────────────────────────────────────────────────────
+  "settings.playback.title": "Playback",
+  "settings.playback.description":
+    "How this device starts a track. Listening positions themselves are shared across devices; this choice is stored in the browser.",
+  "settings.playback.resume": "Starting a track",
+  "settings.playback.resumeHint":
+    "A track played through to the end always starts over, whichever option you pick — otherwise it would end the moment it began and the player would skip past it.",
+  "settings.playback.resumeGroup": "Track start position",
+  "settings.playback.resumeSaved": "Continue where I left off",
+  "settings.playback.resumeSavedHint":
+    "Picks up from the saved position. Anything stopped in the last few seconds, or under ten seconds in, starts from the beginning instead.",
+  "settings.playback.restart": "Always start from the beginning",
+  "settings.playback.restartHint":
+    "Ignores saved positions. Positions are still recorded, so progress bars and the other option keep working.",
+
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite proxy",
   "settings.proxy.description":
@@ -563,6 +578,21 @@ export const ja: Record<TranslationKey, string> = {
   "settings.appearance.hideTags": "ライブラリのカードでジャンルを非表示にする",
   "settings.appearance.hideTagsHint":
     "声優のチップはそのまま表示されます。ジャンルは作品ページと絞り込みパネルには残ります。",
+
+  // ── Settings: playback ────────────────────────────────────────────────────
+  "settings.playback.title": "再生",
+  "settings.playback.description":
+    "この端末でトラックを開始する位置の設定です。再生位置自体は全端末で共有されますが、この選択はブラウザに保存されます。",
+  "settings.playback.resume": "トラックの開始位置",
+  "settings.playback.resumeHint":
+    "最後まで再生し終えたトラックは、どちらを選んでも先頭から再生されます。そうしないと開始直後に終了扱いとなり、プレーヤーが次へ飛ばしてしまうためです。",
+  "settings.playback.resumeGroup": "トラックの開始位置",
+  "settings.playback.resumeSaved": "続きから再生する",
+  "settings.playback.resumeSavedHint":
+    "保存された位置から再開します。終了間際で止めた場合や10秒未満しか再生していない場合は先頭から始まります。",
+  "settings.playback.restart": "常に先頭から再生する",
+  "settings.playback.restartHint":
+    "保存された位置を使いません。位置の記録は続くため、進行バーやもう一方の設定はそのまま機能します。",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsiteプロキシ",

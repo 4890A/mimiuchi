@@ -29,6 +29,7 @@ import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { AppearanceSettings } from "./appearance-settings";
 import { LanguageSettings } from "./language-settings";
+import { PlaybackSettings } from "./playback-settings";
 
 interface Settings {
   dlsiteProxyUrl: string;
@@ -124,6 +125,9 @@ export function SettingsForm({
 
       {/* Appearance */}
       <AppearanceSettings />
+
+      {/* Playback */}
+      <PlaybackSettings />
 
       {/* Proxy */}
       <Card>

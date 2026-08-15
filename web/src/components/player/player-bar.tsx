@@ -251,11 +251,13 @@ export function PlayerBar() {
       <audio
         ref={audioElRef}
         preload="metadata"
-        onLoadedMetadata={(e) => p._setDuration(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) =>
+          p._onLoadedMetadata(e.currentTarget.duration || 0)
+        }
         onTimeUpdate={(e) => p._setTime(e.currentTarget.currentTime)}
         onPlay={() => p._setIsPlaying(true)}
         onPause={() => p._setIsPlaying(false)}
-        onEnded={() => p.next()}
+        onEnded={p._onEnded}
       />
       <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         {waveformView ? (
