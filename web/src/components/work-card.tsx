@@ -6,7 +6,27 @@ import { cn } from "@/lib/utils";
 import { archiveLabel } from "@/lib/metadata/types";
 import type { WorkSummary } from "@/lib/db/queries";
 
-export function WorkCard({ work }: { work: WorkSummary }) {
+/**
+ * URL for one of the card's filter chips. `query` is the library page's current
+ * query string, so the id is *added* to whatever is already filtered instead of
+ * replacing it — clicking chip after chip narrows the grid.
+ */
+function filterHref(query: string | undefined, key: string, id: number): string {
+  const params = new URLSearchParams(query ?? "");
+  const ids = params.get(key)?.split(",").filter(Boolean) ?? [];
+  if (!ids.includes(String(id))) ids.push(String(id));
+  params.set(key, ids.join(","));
+  return `/?${params.toString()}`;
+}
+
+export function WorkCard({
+  work,
+  query,
+}: {
+  work: WorkSummary;
+  /** Current library query string; omit to link to a fresh filter. */
+  query?: string;
+}) {
   const vaShown = work.voiceActors.slice(0, 3);
   const vaExtra = work.voiceActors.length - vaShown.length;
   const tagShown = work.tags.slice(0, 3);
@@ -78,7 +98,7 @@ export function WorkCard({ work }: { work: WorkSummary }) {
             {vaShown.map((va) => (
               <Link
                 key={va.id}
-                href={`/?va=${va.id}`}
+                href={filterHref(query, "va", va.id)}
                 className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground transition-colors hover:bg-primary/15 hover:text-foreground"
               >
                 {va.name}
@@ -97,7 +117,7 @@ export function WorkCard({ work }: { work: WorkSummary }) {
             {tagShown.map((t) => (
               <Link
                 key={t.id}
-                href={`/?tags=${t.id}`}
+                href={filterHref(query, "tags", t.id)}
                 className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
               >
                 {t.name}

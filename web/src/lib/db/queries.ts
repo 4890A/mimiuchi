@@ -32,11 +32,18 @@ export interface WorkSummary {
   archiveName: string | null;
 }
 
+/** Tri-state switch: absent means "no opinion", otherwise keep or drop. */
+export type OnlyOrExclude = "only" | "exclude";
+
 export interface LibraryFilters {
   q?: string;
   tagIds?: number[];
   voiceActorIds?: number[];
   circleIds?: number[];
+  /** `only` keeps just R18 works, `exclude` drops them. */
+  nsfw?: OnlyOrExclude;
+  /** `only` keeps just still-packed archives, `exclude` drops them. */
+  archive?: OnlyOrExclude;
   sort?: "title" | "release" | "added";
   dir?: "asc" | "desc";
   limit?: number;
@@ -55,6 +62,8 @@ export async function listWorksFiltered(
   }
   if (f.circleIds && f.circleIds.length)
     conds.push(inArray(works.circleId, f.circleIds));
+  if (f.nsfw) conds.push(eq(works.nsfw, f.nsfw === "only"));
+  if (f.archive) conds.push(eq(works.isArchive, f.archive === "only"));
 
   let baseQuery = db
     .select({

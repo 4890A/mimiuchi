@@ -9,6 +9,7 @@ import {
   listAllCircles,
   listRecentlyPlayedWorks,
   listRandomWorks,
+  type OnlyOrExclude,
 } from "@/lib/db/queries";
 import {
   TagFilter,
@@ -16,6 +17,7 @@ import {
   CircleFilter,
   SortPicker,
   ActiveFilters,
+  TriStateFilter,
 } from "./_filters";
 import { LibraryGridSize } from "./_library-grid";
 import { OnDeck } from "@/components/on-deck";
@@ -28,6 +30,8 @@ interface SearchParams {
   tags?: string;
   va?: string;
   circles?: string;
+  r18?: string;
+  zip?: string;
   sort?: "title" | "release" | "added";
   dir?: "asc" | "desc";
 }
@@ -44,12 +48,18 @@ export default async function LibraryPage({
   const tagIds = parseIds(sp.tags);
   const vaIds = parseIds(sp.va);
   const circleIds = parseIds(sp.circles);
+  const parseTriState = (v?: string): OnlyOrExclude | undefined =>
+    v === "only" || v === "exclude" ? v : undefined;
+  const nsfw = parseTriState(sp.r18);
+  const archive = parseTriState(sp.zip);
 
   const hasFilters =
     Boolean(sp.q?.trim()) ||
     tagIds.length > 0 ||
     vaIds.length > 0 ||
-    circleIds.length > 0;
+    circleIds.length > 0 ||
+    Boolean(nsfw) ||
+    Boolean(archive);
   const recent = hasFilters ? [] : listRecentlyPlayedWorks(8);
   const random = hasFilters ? [] : listRandomWorks(8);
 
@@ -59,6 +69,8 @@ export default async function LibraryPage({
       tagIds,
       voiceActorIds: vaIds,
       circleIds,
+      nsfw,
+      archive,
       sort: sp.sort,
       dir: sp.dir,
     }),
@@ -66,6 +78,19 @@ export default async function LibraryPage({
     Promise.resolve(listAllVoiceActors()),
     Promise.resolve(listAllCircles()),
   ]);
+
+  // Passed to each card so its tag/seiyuu chips add to the current filters
+  // rather than replacing them.
+  const currentQuery = new URLSearchParams(
+    Object.entries(sp).filter((e): e is [string, string] => Boolean(e[1])),
+  ).toString();
+
+  const activeFilterCount =
+    tagIds.length +
+    vaIds.length +
+    circleIds.length +
+    (nsfw ? 1 : 0) +
+    (archive ? 1 : 0);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
@@ -81,11 +106,9 @@ export default async function LibraryPage({
             >
               <Filter className="h-4 w-4" />
               {t("library.filters")}
-              {(tagIds.length > 0 ||
-                vaIds.length > 0 ||
-                circleIds.length > 0) && (
+              {activeFilterCount > 0 && (
                 <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                  {tagIds.length + vaIds.length + circleIds.length}
+                  {activeFilterCount}
                 </span>
               )}
             </SheetTrigger>
@@ -94,6 +117,34 @@ export default async function LibraryPage({
                 <SheetTitle>{t("library.filters")}</SheetTitle>
               </SheetHeader>
               <div className="space-y-6 p-4">
+                <section>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("library.filter.r18")}
+                  </h3>
+                  <TriStateFilter
+                    paramKey="r18"
+                    value={nsfw}
+                    labels={{
+                      all: t("library.filter.all"),
+                      only: t("library.filter.r18Only"),
+                      exclude: t("library.filter.r18Exclude"),
+                    }}
+                  />
+                </section>
+                <section>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("library.filter.zip")}
+                  </h3>
+                  <TriStateFilter
+                    paramKey="zip"
+                    value={archive}
+                    labels={{
+                      all: t("library.filter.all"),
+                      only: t("library.filter.zipOnly"),
+                      exclude: t("library.filter.zipExclude"),
+                    }}
+                  />
+                </section>
                 <section>
                   <h3 className="mb-2 text-sm font-medium">
                     {t("library.filter.voiceActors")}
@@ -132,6 +183,8 @@ export default async function LibraryPage({
         circles={allCircles
           .filter((c) => circleIds.includes(c.id))
           .map((c) => ({ id: c.id, name: c.name }))}
+        nsfw={nsfw}
+        archive={archive}
       />
 
       <p className="mb-4 text-sm text-muted-foreground">
@@ -152,7 +205,7 @@ export default async function LibraryPage({
       ) : (
         <LibraryGridSize>
           {works.map((w) => (
-            <WorkCard key={w.id} work={w} />
+            <WorkCard key={w.id} work={w} query={currentQuery} />
           ))}
         </LibraryGridSize>
       )}

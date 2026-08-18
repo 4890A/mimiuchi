@@ -200,6 +200,66 @@ function FilterList({
   );
 }
 
+export type TriState = "only" | "exclude" | undefined;
+
+/**
+ * Three-way switch backed by one query param: unset (show everything), `only`
+ * (keep just the matching works) or `exclude` (drop them).
+ */
+export function TriStateFilter({
+  paramKey,
+  value,
+  labels,
+}: {
+  paramKey: string;
+  value: TriState;
+  labels: { all: string; only: string; exclude: string };
+}) {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const set = (next: TriState) => {
+    const q = new URLSearchParams(params.toString());
+    if (next) q.set(paramKey, next);
+    else q.delete(paramKey);
+    const s = q.toString();
+    router.push(s ? `/?${s}` : "/");
+  };
+
+  const options: { key: TriState; label: string }[] = [
+    { key: undefined, label: labels.all },
+    { key: "only", label: labels.only },
+    { key: "exclude", label: labels.exclude },
+  ];
+
+  return (
+    <div
+      role="group"
+      className="inline-flex w-full rounded-md border p-0.5"
+    >
+      {options.map((o) => {
+        const active = value === o.key;
+        return (
+          <button
+            key={o.key ?? "all"}
+            type="button"
+            aria-pressed={active}
+            onClick={() => set(o.key)}
+            className={cn(
+              "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium transition-colors",
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 interface NamedItem {
   id: number;
   name: string;
@@ -210,11 +270,15 @@ export function ActiveFilters({
   tags,
   voiceActors,
   circles,
+  nsfw,
+  archive,
 }: {
   q?: string;
   tags: NamedItem[];
   voiceActors: NamedItem[];
   circles?: NamedItem[];
+  nsfw?: TriState;
+  archive?: TriState;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -225,7 +289,9 @@ export function ActiveFilters({
     !q &&
     tags.length === 0 &&
     voiceActors.length === 0 &&
-    circleList.length === 0
+    circleList.length === 0 &&
+    !nsfw &&
+    !archive
   )
     return null;
 
@@ -254,12 +320,20 @@ export function ActiveFilters({
     push(next);
   };
 
+  const removeParam = (key: string) => {
+    const next = new URLSearchParams(params.toString());
+    next.delete(key);
+    push(next);
+  };
+
   const clearAll = () => {
     const next = new URLSearchParams(params.toString());
     next.delete("q");
     next.delete("tags");
     next.delete("va");
     next.delete("circles");
+    next.delete("r18");
+    next.delete("zip");
     push(next);
   };
 
@@ -267,6 +341,20 @@ export function ActiveFilters({
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
       {q && (
         <FilterChip label={`“${q}”`} onRemove={removeQuery} />
+      )}
+      {nsfw && (
+        <FilterChip
+          label={t(nsfw === "only" ? "filters.r18Only" : "filters.r18Exclude")}
+          onRemove={() => removeParam("r18")}
+        />
+      )}
+      {archive && (
+        <FilterChip
+          label={t(
+            archive === "only" ? "filters.zipOnly" : "filters.zipExclude",
+          )}
+          onRemove={() => removeParam("zip")}
+        />
       )}
       {voiceActors.map((va) => (
         <FilterChip

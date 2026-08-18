@@ -59,6 +59,13 @@ export const en = {
   "library.filter.voiceActors": "Voice actors",
   "library.filter.circles": "Circles",
   "library.filter.tags": "Tags",
+  "library.filter.r18": "R18",
+  "library.filter.zip": "Archives",
+  "library.filter.all": "All",
+  "library.filter.r18Only": "R18 only",
+  "library.filter.r18Exclude": "Hide R18",
+  "library.filter.zipOnly": "Zips only",
+  "library.filter.zipExclude": "Hide zips",
   "library.empty.title": "No works yet",
   "library.empty.before": "Drop folders named like ",
   "library.empty.after":
@@ -81,6 +88,10 @@ export const en = {
 
   // ── Active filter chips ───────────────────────────────────────────────────
   "filters.clearAll": "Clear all",
+  "filters.r18Only": "R18 only",
+  "filters.r18Exclude": "No R18",
+  "filters.zipOnly": "Zips only",
+  "filters.zipExclude": "No zips",
   "filters.remove": "Remove {name}",
 
   // ── On deck ───────────────────────────────────────────────────────────────
@@ -421,6 +432,13 @@ export const ja: Record<TranslationKey, string> = {
   "library.filter.voiceActors": "声優",
   "library.filter.circles": "サークル",
   "library.filter.tags": "ジャンル",
+  "library.filter.r18": "R18",
+  "library.filter.zip": "圧縮ファイル",
+  "library.filter.all": "すべて",
+  "library.filter.r18Only": "R18のみ",
+  "library.filter.r18Exclude": "R18を除く",
+  "library.filter.zipOnly": "zipのみ",
+  "library.filter.zipExclude": "zipを除く",
   "library.empty.title": "作品がまだありません",
   "library.empty.before": "",
   "library.empty.after":
@@ -443,6 +461,10 @@ export const ja: Record<TranslationKey, string> = {
 
   // ── Active filter chips ───────────────────────────────────────────────────
   "filters.clearAll": "すべて解除",
+  "filters.r18Only": "R18のみ",
+  "filters.r18Exclude": "R18を除く",
+  "filters.zipOnly": "zipのみ",
+  "filters.zipExclude": "zipを除く",
   "filters.remove": "{name}を解除",
 
   // ── On deck ───────────────────────────────────────────────────────────────
