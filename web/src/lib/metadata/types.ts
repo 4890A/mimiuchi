@@ -15,7 +15,7 @@ export interface NormalizedWork {
   nsfw?: boolean;
   voiceActors: Array<{ name: string; nameEn?: string }>;
   tags: Array<{ name: string; nameEn?: string; category?: string }>;
-  source: "dlsite" | "hvdb" | "manual";
+  source: "dlsite" | "manual";
 }
 
 export const RJ_REGEX = /\b(RJ|VJ|BJ)\d{6,8}\b/i;

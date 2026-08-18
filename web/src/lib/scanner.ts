@@ -2,7 +2,7 @@ import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { extractWorkId, isArchiveFile } from "./metadata/types";
-import { fetchMetadata, downloadCover } from "./metadata";
+import { fetchMetadata, downloadCover, DlsiteUnavailableError } from "./metadata";
 import {
   upsertWork,
   upsertTrack,
@@ -42,6 +42,14 @@ export type ScanEvent =
     }
   | { type: "fetch-meta"; workId: string }
   | {
+      type: "meta-retry";
+      workId: string;
+      attempt: number;
+      delayMs: number;
+      reason: string;
+    }
+  | { type: "meta-cooldown"; workId: string; delayMs: number }
+  | {
       type: "meta-result";
       workId: string;
       found: boolean;
@@ -73,6 +81,8 @@ export interface ScanOptions {
   forceMetadata?: boolean;
   /** If set, only scan works whose id is in this list. */
   filterIds?: ReadonlySet<string>;
+  /** Backoff timings. Production uses the defaults; tests shrink them to 0. */
+  retry?: { baseDelayMs?: number; cooldownMs?: number };
   onEvent?: (event: ScanEvent) => void;
 }
 
@@ -83,6 +93,20 @@ export interface ScanResult {
   tracksScanned: number;
   metadataFetched: number;
   errors: string[];
+  /** Set when DLsite went away and the run stopped early. */
+  aborted?: boolean;
+}
+
+/** A minute is long enough for a rate-limit window or a blip to pass. */
+const DLSITE_COOLDOWN_MS = 60_000;
+/**
+ * How many works in a row have to exhaust their retries before we call it an
+ * outage rather than a run of bad ids.
+ */
+const DLSITE_UNAVAILABLE_STREAK = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function* walk(dir: string, depth = 0): AsyncGenerator<string> {
@@ -228,6 +252,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         const snap = snapshots.get(id);
         if (!snap) return; // new work — must scan
         if (!snap.metadataSource || !snap.lastMetadataSyncAt) return;
+        // HVDB is no longer a source, so its rows are due a DLsite refresh
+        // even though they look complete.
+        if (snap.metadataSource === "hvdb") return;
         if (snap.tagCount === 0) return;
         if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
         if (!snap.lastScannedAt) return;
@@ -251,6 +278,8 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   emit({ type: "start", total, libraryRoots: opts.libraryRoots });
 
   let index = 0;
+  /** Consecutive works whose lookup ran out of retries. Reset by any answer. */
+  let unavailableStreak = 0;
   for (const [workId, entry] of workEntries) {
     // The work's directory, or — for an archive entry — the container file.
     const workPath = entry.path;
@@ -264,6 +293,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
       const needsMeta =
         opts.forceMetadata ||
         !existing?.metadataSource ||
+        // HVDB is gone as a source; anything it wrote is stale by definition,
+        // so an ordinary incremental scan replaces it with DLsite's version.
+        existing.metadataSource === "hvdb" ||
         !existing?.lastMetadataSyncAt ||
         coverMissing ||
         tagsMissing;
@@ -283,7 +315,58 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
 
       if (needsMeta) {
         emit({ type: "fetch-meta", workId });
-        metadata = await fetchMetadata(workId);
+        const attempt = () =>
+          fetchMetadata(workId, {
+            onRetry: (info) => emit({ type: "meta-retry", workId, ...info }),
+            baseDelayMs: opts.retry?.baseDelayMs,
+          });
+        // Set when DLsite never answered, so the "nothing found" branch below
+        // can say that instead of claiming the work doesn't exist.
+        let unavailable: DlsiteUnavailableError | null = null;
+        try {
+          metadata = await attempt();
+          unavailableStreak = 0;
+        } catch (err) {
+          if (!(err instanceof DlsiteUnavailableError)) throw err;
+          unavailable = err;
+          unavailableStreak++;
+
+          // One work failing its retries is just a bad work — move on. Several
+          // in a row means DLsite itself is gone, so wait out whatever it is
+          // and give it exactly one more chance before stopping.
+          if (unavailableStreak >= DLSITE_UNAVAILABLE_STREAK) {
+            const cooldown = opts.retry?.cooldownMs ?? DLSITE_COOLDOWN_MS;
+            emit({ type: "meta-cooldown", workId, delayMs: cooldown });
+            await sleep(cooldown);
+            try {
+              metadata = await attempt();
+              unavailable = null;
+              unavailableStreak = 0;
+            } catch (retryErr) {
+              if (!(retryErr instanceof DlsiteUnavailableError)) throw retryErr;
+              unavailable = retryErr;
+              result.aborted = true;
+            }
+          }
+        }
+
+        if (result.aborted) {
+          const message = `DLsite is unavailable — scan stopped at ${workId}: ${unavailable?.message}`;
+          result.errors.push(message);
+          emit({ type: "error", workId, message });
+          // Record the row anyway so the folder isn't lost; its tracks and
+          // metadata wait for the next run.
+          upsertWork({
+            id: workId,
+            folderPath: workPath,
+            metadata: null,
+            coverPath,
+            isArchive: entry.isArchive,
+          });
+          if (!existing) result.worksNew++;
+          break;
+        }
+
         emit({
           type: "meta-result",
           workId,
@@ -305,7 +388,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
             }
           }
         } else {
-          const message = `No metadata found for ${workId}`;
+          const message = unavailable
+            ? `DLsite did not answer for ${workId}: ${unavailable.message}`
+            : `No metadata found for ${workId}`;
           result.errors.push(message);
           emit({ type: "error", workId, message });
         }

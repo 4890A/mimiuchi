@@ -116,6 +116,29 @@ export function useScanProgress(): {
           currentStatus: t("scan.status.fetchingMeta", { id: ev.workId }),
           log: pushLog(prev, t("scan.log.fetchingMeta")),
         };
+      case "meta-retry":
+        return {
+          ...prev,
+          currentStatus: t("scan.status.metaRetry", { id: ev.workId }),
+          log: pushLog(
+            prev,
+            t("scan.log.metaRetry", {
+              reason: ev.reason,
+              seconds: Math.round(ev.delayMs / 100) / 10,
+            }),
+          ),
+        };
+      case "meta-cooldown":
+        return {
+          ...prev,
+          currentStatus: t("scan.status.metaCooldown"),
+          log: pushLog(
+            prev,
+            t("scan.log.metaCooldown", {
+              seconds: Math.round(ev.delayMs / 1000),
+            }),
+          ),
+        };
       case "meta-result":
         return {
           ...prev,

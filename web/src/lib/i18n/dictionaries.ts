@@ -251,13 +251,16 @@ export const en = {
     "Ignores saved positions. Positions are still recorded, so progress bars and the other option keep working.",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
-  "settings.proxy.title": "DLsite proxy",
+  "settings.proxy.title": "DLsite",
   "settings.proxy.description":
-    "Route DLsite metadata and image requests through an HTTP proxy (e.g. a Japan-based proxy like glueton). HVDB is not proxied.",
+    "Route DLsite metadata and image requests through an HTTP proxy (e.g. a Japan-based proxy like glueton), and set how fast to ask.",
   "settings.proxy.enable": "Enable DLsite proxy",
   "settings.proxy.url": "Proxy URL",
   "settings.proxy.test": "Test",
   "settings.proxy.needUrl": "Enter a proxy URL first",
+  "settings.dlsite.rateLimit": "Minimum delay between DLsite requests (ms)",
+  "settings.dlsite.rateLimitHint":
+    "Applies to metadata and cover downloads alike. 0 disables the wait. Scans also back off on their own when DLsite returns an error.",
 
   // ── Settings: paths ───────────────────────────────────────────────────────
   "settings.paths.title": "Library paths",
@@ -351,6 +354,8 @@ export const en = {
   "scan.status.newWork": "New work {id}",
   "scan.status.fetchingMeta": "Fetching metadata for {id}…",
   "scan.status.noMeta": "No metadata found for {id}",
+  "scan.status.metaRetry": "DLsite is not answering — retrying {id}…",
+  "scan.status.metaCooldown": "DLsite is not answering — waiting before one more try…",
   "scan.status.downloadingCover": "Downloading cover for {id}…",
   "scan.status.coverSaved": "Saved cover for {id}",
   "scan.status.metaUpToDate": "{id}: metadata up to date",
@@ -368,6 +373,8 @@ export const en = {
   "scan.log.archiveSuffix": " (archived)",
   "scan.log.fetchingMeta": "  → fetching metadata",
   "scan.log.noMeta": "  ✗ no metadata",
+  "scan.log.metaRetry": "  … {reason} — retrying in {seconds}s",
+  "scan.log.metaCooldown": "  ! DLsite unavailable — pausing {seconds}s before one last try",
   "scan.log.cover": "  → cover {url}",
   "scan.log.coverSaved": "  ✓ cover saved",
   "scan.log.metaUpToDate": "  • metadata up to date",
@@ -628,13 +635,16 @@ export const ja: Record<TranslationKey, string> = {
     "保存された位置を使いません。位置の記録は続くため、進行バーやもう一方の設定はそのまま機能します。",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
-  "settings.proxy.title": "DLsiteプロキシ",
+  "settings.proxy.title": "DLsite",
   "settings.proxy.description":
-    "DLsiteのメタデータと画像のリクエストをHTTPプロキシ経由にします（gluetonなど日本国内のプロキシを想定）。HVDBはプロキシを経由しません。",
+    "DLsiteのメタデータと画像のリクエストをHTTPプロキシ経由にし（gluetonなど日本国内のプロキシを想定）、リクエストの間隔を設定します。",
   "settings.proxy.enable": "DLsiteプロキシを有効にする",
   "settings.proxy.url": "プロキシURL",
   "settings.proxy.test": "テスト",
   "settings.proxy.needUrl": "先にプロキシURLを入力してください",
+  "settings.dlsite.rateLimit": "DLsiteへのリクエストの最小間隔（ミリ秒）",
+  "settings.dlsite.rateLimitHint":
+    "メタデータとカバー画像の両方に適用されます。0で待機なし。DLsiteがエラーを返した場合は自動的に間隔を空けます。",
 
   // ── Settings: paths ───────────────────────────────────────────────────────
   "settings.paths.title": "ライブラリのパス",
@@ -728,6 +738,8 @@ export const ja: Record<TranslationKey, string> = {
   "scan.status.newWork": "新しい作品 {id}",
   "scan.status.fetchingMeta": "{id}のメタデータを取得中…",
   "scan.status.noMeta": "{id}のメタデータが見つかりません",
+  "scan.status.metaRetry": "DLsiteが応答しません — {id}を再試行中…",
+  "scan.status.metaCooldown": "DLsiteが応答しません — 少し待ってから最後の再試行をします…",
   "scan.status.downloadingCover": "{id}のカバーをダウンロード中…",
   "scan.status.coverSaved": "{id}のカバーを保存しました",
   "scan.status.metaUpToDate": "{id}：メタデータは最新です",
@@ -745,6 +757,8 @@ export const ja: Record<TranslationKey, string> = {
   "scan.log.archiveSuffix": "（圧縮済み）",
   "scan.log.fetchingMeta": "  → メタデータを取得中",
   "scan.log.noMeta": "  ✗ メタデータなし",
+  "scan.log.metaRetry": "  … {reason} — {seconds}秒後に再試行",
+  "scan.log.metaCooldown": "  ! DLsiteに接続できません — {seconds}秒待ってから最後の再試行",
   "scan.log.cover": "  → カバー {url}",
   "scan.log.coverSaved": "  ✓ カバーを保存",
   "scan.log.metaUpToDate": "  • メタデータは最新",

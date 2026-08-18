@@ -29,13 +29,20 @@ export async function POST(req: Request) {
       };
       try {
         let libraryDone: Extract<ScanEvent, { type: "done" }> | null = null;
-        const willChainDurations = !missingSeiyuu;
+        let willChainDurations = !missingSeiyuu;
         await scanLibrary({
           libraryRoots,
           coversDir,
           forceMetadata,
           filterIds,
           onEvent: (ev) => {
+            // A scan cut short by a DLsite outage added no tracks worth
+            // measuring, so let its "done" through and skip the chase.
+            if (ev.type === "done" && ev.result.aborted) {
+              willChainDurations = false;
+              send(ev);
+              return;
+            }
             // Hold the library scan's "done" until the durations phase
             // finishes — otherwise the client marks the panel complete.
             if (ev.type === "done" && willChainDurations) {

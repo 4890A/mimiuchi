@@ -18,7 +18,7 @@ import {
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache, listRandomWorks, type RecentWork } from "./db/queries";
 import { upsertWork } from "./db/repository";
-import { fetchMetadata, downloadCover } from "./metadata";
+import { fetchMetadata, downloadCover, DlsiteUnavailableError } from "./metadata";
 import { getSettings } from "./settings";
 import { resolveCoversDir } from "./config";
 
@@ -187,7 +187,7 @@ export interface RefreshedWorkMetadata {
   coverUrl: string | null;
 }
 
-/** Re-fetch a single work from DLsite (HVDB as fallback) and overwrite its
+/** Re-fetch a single work from DLsite and overwrite its
  *  stored details, tags, voice actors and cover — the same write the scanner
  *  does with `forceMetadata`, minus the library walk. Local edits to that
  *  work are lost, which is the point: it's the "undo my edits / pick up the
@@ -212,6 +212,11 @@ export async function refreshWorkMetadata(
   try {
     metadata = await fetchMetadata(workId);
   } catch (err) {
+    // The retries are already spent by the time this throws, so say so plainly
+    // instead of surfacing a stack-ish blob in a toast.
+    if (err instanceof DlsiteUnavailableError) {
+      return { ok: false, error: "DLsite is not responding — try again later" };
+    }
     return { ok: false, error: String(err) };
   }
   if (!metadata) return { ok: false, error: "no listing found" };

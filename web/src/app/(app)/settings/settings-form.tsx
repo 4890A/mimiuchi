@@ -34,6 +34,7 @@ import { PlaybackSettings } from "./playback-settings";
 interface Settings {
   dlsiteProxyUrl: string;
   dlsiteProxyEnabled: boolean;
+  dlsiteMinIntervalMs: number;
   libraryRoots: string[];
   coversDir: string;
 }
@@ -74,6 +75,7 @@ export function SettingsForm({
   const dirty =
     values.dlsiteProxyUrl !== saved.dlsiteProxyUrl ||
     values.dlsiteProxyEnabled !== saved.dlsiteProxyEnabled ||
+    values.dlsiteMinIntervalMs !== saved.dlsiteMinIntervalMs ||
     rootsChanged ||
     values.coversDir !== saved.coversDir;
 
@@ -193,6 +195,32 @@ export function SettingsForm({
                 <XCircle className="h-3.5 w-3.5" /> {test.message}
               </p>
             )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground" htmlFor="dlsite-rate-limit">
+              {t("settings.dlsite.rateLimit")}
+            </label>
+            <Input
+              id="dlsite-rate-limit"
+              type="number"
+              min={0}
+              max={60000}
+              step={100}
+              value={values.dlsiteMinIntervalMs}
+              onChange={(e) => {
+                // An emptied field parses to NaN; treat it as "no wait" rather
+                // than letting NaN reach the save body.
+                const n = Number.parseInt(e.target.value, 10);
+                setValues((v) => ({
+                  ...v,
+                  dlsiteMinIntervalMs: Number.isFinite(n) ? Math.max(0, n) : 0,
+                }));
+              }}
+              className="max-w-40"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("settings.dlsite.rateLimitHint")}
+            </p>
           </div>
         </CardContent>
       </Card>

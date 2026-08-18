@@ -6,10 +6,12 @@ import { after, afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { mockNet, stubGlobalFetch, type MockNet, type StubbedFetch } from "../test/net";
+import { mockNet, type MockNet } from "../test/net";
 import { scanLibrary, type ScanEvent } from "./scanner";
 import { BACKUP_TABLES } from "./backup";
 import { sqlite } from "./db/client";
+import { setSettings } from "./settings";
+import { resetDlsiteThrottle } from "./metadata/throttle";
 
 /**
  * End-to-end scan: a fake library on disk + a stubbed DLsite + the real
@@ -36,7 +38,6 @@ const FIXTURE = JSON.parse(
 ) as Array<Record<string, unknown>>;
 
 let net: MockNet;
-let hvdb: StubbedFetch;
 
 beforeEach(() => {
   wipeDb();
@@ -44,14 +45,15 @@ beforeEach(() => {
   resetDir(coversDir);
 
   net = mockNet();
-  // HVDB uses the global fetch, and is only consulted when DLsite comes up
-  // empty. Answering 404 keeps the fallback path quiet and offline.
-  hvdb = stubGlobalFetch(() => ({ status: 404, body: "" }));
+  // The shipped default is a 1s gap between DLsite requests, which would add a
+  // second per work to a suite that runs in about two. These tests are offline
+  // anyway, so there is nothing to be polite to.
+  setSettings({ dlsiteMinIntervalMs: 0 });
+  resetDlsiteThrottle();
 });
 
 afterEach(() => {
   net.restore();
-  hvdb.restore();
 });
 
 after(() => {
@@ -102,6 +104,9 @@ function scan(overrides: Partial<Parameters<typeof scanLibrary>[0]> = {}) {
   const run = scanLibrary({
     libraryRoots: [libraryRoot],
     coversDir,
+    // Zero out the backoff and the outage cooldown — the production values are
+    // seconds and a minute, and nothing here is worth waiting on.
+    retry: { baseDelayMs: 0, cooldownMs: 0 },
     onEvent: (e) => events.push(e),
     ...overrides,
   });
@@ -551,7 +556,7 @@ test("filterIds limits the scan to the listed works", async () => {
 
 test("a work with no metadata anywhere is still indexed", async () => {
   makeWork("RJ236823", ["01 Intro.mp3"]);
-  // Both DLsite id variants miss, and the HVDB stub 404s.
+  // Both DLsite id variants 404 — a settled "not on DLsite".
   stubMissing("RJ236823", "RJ00236823");
 
   const result = await scan().run;
@@ -592,7 +597,8 @@ test("a network failure leaves the work indexed and records an error", async () 
     net.agent
       .get(DLSITE)
       .intercept({ path: API(id), method: "GET" })
-      .replyWithError(new Error("ECONNRESET"));
+      .replyWithError(new Error("ECONNRESET"))
+      .times(3);
   }
 
   const result = await scan().run;
@@ -600,6 +606,61 @@ test("a network failure leaves the work indexed and records an error", async () 
   assert.equal(result.metadataFetched, 0);
   assert.ok(workRow("RJ236823"), "a transport failure must not lose the work");
   assert.equal(result.tracksScanned, 1);
+  assert.equal(result.aborted, undefined, "one bad work is not an outage");
+  assert.ok(result.errors.some((e) => e.includes("did not answer")));
+});
+
+test("a work already sourced from hvdb is re-fetched without a force", async () => {
+  makeWork(WORK_ID, ["a.mp3"]);
+  stubDlsite();
+  await scan().run;
+
+  // Rewrite the row the way an old HVDB-sourced scan would have left it.
+  sqlite
+    .prepare(`UPDATE works SET metadata_source = 'hvdb', title = 'old title' WHERE id = ?`)
+    .run(WORK_ID);
+  stubDlsite();
+
+  const result = await scan().run;
+
+  assert.equal(result.metadataFetched, 1, "the stale hvdb row is refreshed");
+  assert.equal(workRow(WORK_ID)?.metadata_source, "dlsite");
+  assert.notEqual(workRow(WORK_ID)?.title, "old title");
+});
+
+test("a sustained DLsite outage pauses, retries once, then aborts the scan", async () => {
+  // Enough works that the streak threshold is reached with room to spare — if
+  // the scan didn't stop, the later ones would be indexed too.
+  const ids = ["RJ100001", "RJ100002", "RJ100003", "RJ100004", "RJ100005"];
+  for (const id of ids) makeWork(id, ["a.mp3"]);
+  net.agent
+    .get(DLSITE)
+    .intercept({ path: /\/maniax\/api\/=\/product\.json/, method: "GET" })
+    .reply(503, "")
+    .persist();
+
+  const { run, events } = scan();
+  const result = await run;
+
+  assert.equal(result.aborted, true, "the scan gives up rather than grinding on");
+  assert.ok(
+    events.some((e) => e.type === "meta-cooldown"),
+    "it waits out the outage before the last try",
+  );
+  assert.ok(
+    events.some((e) => e.type === "meta-retry"),
+    "each lookup backs off between attempts",
+  );
+  assert.ok(
+    result.errors.some((e) => e.includes("DLsite is unavailable")),
+    "the reason is recorded",
+  );
+  const indexed = ids.filter((id) => workRow(id)).length;
+  assert.ok(indexed < ids.length, "the scan stopped before the last work");
+  assert.ok(
+    events.some((e) => e.type === "done"),
+    "the run still finishes cleanly so the progress panel closes",
+  );
 });
 
 test("a failed cover download does not fail the work", async () => {

@@ -2,7 +2,10 @@ import { beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { mockNet, type MockNet } from "../../test/net";
-import { fetchFromDlsite } from "./dlsite";
+import { DlsiteUnavailableError, fetchFromDlsite } from "./dlsite";
+
+/** Retry tests assert on the delays rather than sitting through them. */
+const noSleep = async () => {};
 
 /**
  * Parser tests for the DLsite announce API.
@@ -145,11 +148,101 @@ test("propagates transport errors rather than swallowing them", async () => {
   net.agent
     .get(ORIGIN)
     .intercept({ path: API_PATH(WORK_ID), method: "GET" })
-    .replyWithError(new Error("socket hang up"));
+    .replyWithError(new Error("socket hang up"))
+    .times(3);
 
-  // fetchMetadata is the layer that catches; the fetcher itself must throw so
-  // a proxy misconfiguration doesn't look like "work not found".
-  await assert.rejects(() => fetchFromDlsite(WORK_ID));
+  // A dead socket must not look like "work not found" — a proxy that isn't
+  // there would otherwise quietly wipe every work's metadata.
+  await assert.rejects(
+    () => fetchFromDlsite(WORK_ID, { sleep: noSleep }),
+    DlsiteUnavailableError,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Retries and backoff
+// ---------------------------------------------------------------------------
+
+test("retries a 429 and returns the work when it clears", async () => {
+  net.reply(ORIGIN, API_PATH(WORK_ID), "", { status: 429, headers: {} });
+  net.reply(ORIGIN, API_PATH(WORK_ID), FIXTURE);
+
+  const waits: number[] = [];
+  const work = await fetchFromDlsite(WORK_ID, {
+    sleep: async (ms) => void waits.push(ms),
+    baseDelayMs: 1000,
+  });
+
+  assert.ok(work, "the second attempt succeeds");
+  assert.deepEqual(waits, [1000], "one backoff, at the base delay");
+  net.assertAllConsumed();
+});
+
+test("honours Retry-After over the computed backoff", async () => {
+  net.reply(ORIGIN, API_PATH(WORK_ID), "", {
+    status: 429,
+    headers: { "retry-after": "2" },
+  });
+  net.reply(ORIGIN, API_PATH(WORK_ID), FIXTURE);
+
+  const waits: number[] = [];
+  await fetchFromDlsite(WORK_ID, {
+    sleep: async (ms) => void waits.push(ms),
+    baseDelayMs: 1000,
+  });
+
+  assert.deepEqual(waits, [2000], "DLsite's own number wins");
+});
+
+test("gives up after the attempt budget and reports the status", async () => {
+  net.reply(ORIGIN, API_PATH(WORK_ID), "", { status: 503, times: 3 });
+
+  const info: Array<{ attempt: number; delayMs: number }> = [];
+  await assert.rejects(
+    () =>
+      fetchFromDlsite(WORK_ID, {
+        sleep: noSleep,
+        baseDelayMs: 100,
+        onRetry: (i) => info.push({ attempt: i.attempt, delayMs: i.delayMs }),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof DlsiteUnavailableError);
+      assert.equal(err.status, 503);
+      assert.equal(err.attempts, 3);
+      return true;
+    },
+  );
+
+  // Three attempts means two waits, and the delay doubles between them.
+  assert.deepEqual(info, [
+    { attempt: 1, delayMs: 100 },
+    { attempt: 2, delayMs: 200 },
+  ]);
+  net.assertAllConsumed();
+});
+
+test("a 404 is a settled answer and costs exactly one request", async () => {
+  net.reply(ORIGIN, API_PATH(WORK_ID), "", { status: 404 });
+
+  const waits: number[] = [];
+  assert.equal(
+    await fetchFromDlsite(WORK_ID, { sleep: async (ms) => void waits.push(ms) }),
+    null,
+  );
+  assert.deepEqual(waits, [], "a missing work is not retried");
+  net.assertAllConsumed();
+});
+
+test("an empty list is a settled answer too", async () => {
+  net.reply(ORIGIN, API_PATH(WORK_ID), []);
+
+  const waits: number[] = [];
+  assert.equal(
+    await fetchFromDlsite(WORK_ID, { sleep: async (ms) => void waits.push(ms) }),
+    null,
+  );
+  assert.deepEqual(waits, []);
+  net.assertAllConsumed();
 });
 
 // ---------------------------------------------------------------------------

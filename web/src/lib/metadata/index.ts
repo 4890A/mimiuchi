@@ -1,11 +1,12 @@
 import { ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
-import { fetchFromDlsite } from "./dlsite";
-import { fetchFromHvdb } from "./hvdb";
+import { REQUEST_TIMEOUT_MS, fetchFromDlsite, type RetryInfo } from "./dlsite";
+import { setDlsiteMinInterval, throttled } from "./throttle";
 import type { NormalizedWork } from "./types";
-import { getDlsiteProxyUrl } from "../settings";
+import { getDlsiteMinIntervalMs, getDlsiteProxyUrl } from "../settings";
 
 export type { NormalizedWork } from "./types";
 export { extractWorkId, coverBucket, RJ_REGEX } from "./types";
+export { DlsiteUnavailableError, type RetryInfo } from "./dlsite";
 
 function idVariants(id: string): string[] {
   const m = id.match(/^([A-Z]+)(\d+)$/i);
@@ -35,26 +36,35 @@ function getDlsiteDispatcher(): Dispatcher | undefined {
   }
 }
 
+export interface FetchMetadataOptions {
+  /** Called before each backoff wait, so a scan can log rather than look hung. */
+  onRetry?: (info: RetryInfo) => void;
+  /** First backoff step; doubles from there. Overridden only by tests. */
+  baseDelayMs?: number;
+}
+
+/**
+ * Looks a work up on DLsite, trying the id spellings DLsite has used over the
+ * years until one resolves.
+ *
+ * Throws `DlsiteUnavailableError` if DLsite stops answering. That propagates
+ * on purpose: replaying the remaining variants against a server that is
+ * already refusing us is exactly the request amplification worth avoiding.
+ */
 export async function fetchMetadata(
   id: string,
+  opts: FetchMetadataOptions = {},
 ): Promise<NormalizedWork | null> {
+  setDlsiteMinInterval(getDlsiteMinIntervalMs());
   const variants = idVariants(id);
   const dispatcher = getDlsiteDispatcher();
   for (const variant of variants) {
-    try {
-      const dl = await fetchFromDlsite(variant, dispatcher);
-      if (dl && dl.title) return { ...dl, id };
-    } catch (err) {
-      console.warn(`[metadata] DLsite fetch failed for ${variant}:`, err);
-    }
-  }
-  for (const variant of variants) {
-    try {
-      const hv = await fetchFromHvdb(variant);
-      if (hv && hv.title) return { ...hv, id };
-    } catch (err) {
-      console.warn(`[metadata] HVDB fetch failed for ${variant}:`, err);
-    }
+    const dl = await fetchFromDlsite(variant, {
+      dispatcher,
+      onRetry: opts.onRetry,
+      baseDelayMs: opts.baseDelayMs,
+    });
+    if (dl && dl.title) return { ...dl, id };
   }
   return null;
 }
@@ -64,16 +74,22 @@ export async function downloadCover(
   destPath: string,
 ): Promise<boolean> {
   try {
-    const dispatcher = url.includes("dlsite") ? getDlsiteDispatcher() : undefined;
-    const res = await undiciFetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        Referer: "https://www.dlsite.com/",
-      },
-      dispatcher,
-    });
+    const isDlsite = url.includes("dlsite");
+    const dispatcher = isDlsite ? getDlsiteDispatcher() : undefined;
+    if (isDlsite) setDlsiteMinInterval(getDlsiteMinIntervalMs());
+    const run = () =>
+      undiciFetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          Referer: "https://www.dlsite.com/",
+        },
+        dispatcher,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    // Covers come from img.dlsite.jp — same operator, same queue.
+    const res = isDlsite ? await throttled(run) : await run();
     if (!res.ok) return false;
     const buf = Buffer.from(await res.arrayBuffer());
     const fs = await import("node:fs/promises");
@@ -82,6 +98,7 @@ export async function downloadCover(
     await fs.writeFile(destPath, buf);
     return true;
   } catch (err) {
+    // A missing cover is not worth failing a scan over.
     console.warn(`[metadata] cover download failed:`, err);
     return false;
   }

@@ -5,16 +5,11 @@ import type { Dispatcher } from "undici";
 /**
  * HTTP stubbing for the metadata fetchers.
  *
- * The codebase reaches the network two different ways, and they need two
- * different stubs:
+ * Everything that leaves the process — `lib/metadata/dlsite` and
+ * `downloadCover` — calls the `undici` package's `fetch` directly, so a single
+ * installed `MockAgent` intercepts the lot.
  *
- *   - `lib/metadata/dlsite` and `downloadCover` call the `undici` package's
- *     `fetch` directly, so an installed `MockAgent` intercepts them.
- *   - `lib/metadata/hvdb` calls the global `fetch`. Node's built-in fetch is a
- *     *separate* copy of undici from the npm package, so the MockAgent does not
- *     reliably reach it — `stubGlobalFetch` swaps the global instead.
- *
- * Both are opt-in per test file and undo themselves via the returned handle.
+ * It is opt-in per test file and undoes itself via the returned handle.
  */
 
 export interface MockNet {
@@ -64,44 +59,6 @@ export function mockNet(): MockNet {
     },
     restore() {
       setGlobalDispatcher(previous);
-    },
-  };
-}
-
-export type FetchHandler = (
-  url: string,
-  init?: RequestInit,
-) => { status?: number; body: string; headers?: Record<string, string> };
-
-export interface StubbedFetch {
-  /** Every URL requested, in order. */
-  calls: string[];
-  restore(): void;
-}
-
-/**
- * Replaces `globalThis.fetch` with `handler`. Returning `status: 0` from the
- * handler makes the call reject, which is how network failure is simulated.
- */
-export function stubGlobalFetch(handler: FetchHandler): StubbedFetch {
-  const original = globalThis.fetch;
-  const calls: string[] = [];
-
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input.toString();
-    calls.push(url);
-    const res = handler(url, init);
-    if (res.status === 0) throw new TypeError(`fetch failed: ${url}`);
-    return new Response(res.body, {
-      status: res.status ?? 200,
-      headers: res.headers ?? { "content-type": "text/html; charset=utf-8" },
-    });
-  }) as typeof globalThis.fetch;
-
-  return {
-    calls,
-    restore() {
-      globalThis.fetch = original;
     },
   };
 }
