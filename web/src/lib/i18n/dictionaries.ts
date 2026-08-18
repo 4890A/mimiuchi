@@ -115,7 +115,10 @@ export const en = {
   "work.viewOnDlsite": "View on DLsite",
   "work.tracks": "Tracks",
   "work.noTracks": "No audio files found in this work’s folder.",
+  "work.noTracksArchived": "Nothing to play yet — extract the archive, then re-scan.",
+  "work.archived": "Still packed in {file} — extract it to play this work.",
   "work.openFolder": "Open folder",
+  "work.showArchive": "Show archive",
   "work.openFolderFailed": "Couldn’t open folder: {error}",
 
   // ── Tracks ────────────────────────────────────────────────────────────────
@@ -349,6 +352,7 @@ export const en = {
   "scan.log.allUpToDate": "All works up to date",
   "scan.log.scanningWorks": "Scanning {count} works (skipping up-to-date ones)",
   "scan.log.newSuffix": " (new)",
+  "scan.log.archiveSuffix": " (archived)",
   "scan.log.fetchingMeta": "  → fetching metadata",
   "scan.log.noMeta": "  ✗ no metadata",
   "scan.log.cover": "  → cover {url}",
@@ -475,7 +479,10 @@ export const ja: Record<TranslationKey, string> = {
   "work.viewOnDlsite": "DLsiteで見る",
   "work.tracks": "トラック",
   "work.noTracks": "この作品のフォルダーに音声ファイルが見つかりません。",
+  "work.noTracksArchived": "まだ再生できません。書庫を展開してから再スキャンしてください。",
+  "work.archived": "{file} に圧縮されたままです。展開すると再生できます。",
   "work.openFolder": "フォルダーを開く",
+  "work.showArchive": "書庫を表示",
   "work.openFolderFailed": "フォルダーを開けませんでした：{error}",
 
   // ── Tracks ────────────────────────────────────────────────────────────────
@@ -709,6 +716,7 @@ export const ja: Record<TranslationKey, string> = {
   "scan.log.allUpToDate": "すべての作品が最新です",
   "scan.log.scanningWorks": "{count}件の作品をスキャン中（最新のものはスキップ）",
   "scan.log.newSuffix": "（新規）",
+  "scan.log.archiveSuffix": "（圧縮済み）",
   "scan.log.fetchingMeta": "  → メタデータを取得中",
   "scan.log.noMeta": "  ✗ メタデータなし",
   "scan.log.cover": "  → カバー {url}",

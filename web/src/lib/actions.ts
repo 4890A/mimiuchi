@@ -198,7 +198,11 @@ export async function refreshWorkMetadata(
   { ok: true; work: RefreshedWorkMetadata } | { ok: false; error: string }
 > {
   const row = db
-    .select({ folderPath: works.folderPath, coverPath: works.coverPath })
+    .select({
+      folderPath: works.folderPath,
+      coverPath: works.coverPath,
+      isArchive: works.isArchive,
+    })
     .from(works)
     .where(eq(works.id, workId))
     .get();
@@ -234,7 +238,15 @@ export async function refreshWorkMetadata(
     }
   }
 
-  upsertWork({ id: workId, folderPath: row.folderPath, metadata, coverPath });
+  // Carry the archive flag over: only a scan, which actually looks at the
+  // disk, gets to decide whether the work is still packed.
+  upsertWork({
+    id: workId,
+    folderPath: row.folderPath,
+    metadata,
+    coverPath,
+    isArchive: row.isArchive,
+  });
 
   invalidateSearchIndex();
   invalidateFilterListCache();
@@ -379,13 +391,15 @@ export async function deleteWork(
   return { ok: true };
 }
 
-/** Open the work's folder in the host machine's file manager. Only useful
- *  when the browser and the Next.js server are on the same machine. */
+/** Open the work in the host machine's file manager: its folder, or — for a
+ *  work still packed in an archive — the containing folder with the archive
+ *  file selected, ready to be extracted by hand. Only useful when the browser
+ *  and the Next.js server are on the same machine. */
 export async function revealWorkFolder(
   workId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = db
-    .select({ folderPath: works.folderPath })
+    .select({ folderPath: works.folderPath, isArchive: works.isArchive })
     .from(works)
     .where(eq(works.id, workId))
     .get();
@@ -396,11 +410,20 @@ export async function revealWorkFolder(
 
   try {
     if (process.platform === "win32") {
-      spawn("explorer.exe", [row.folderPath], { detached: true }).unref();
+      // `explorer.exe <file>` would hand the archive to whatever is registered
+      // to open it; /select, opens the folder around it instead. Explorer
+      // wants the switch and the path as one argument.
+      const args = row.isArchive
+        ? [`/select,${row.folderPath}`]
+        : [row.folderPath];
+      spawn("explorer.exe", args, { detached: true }).unref();
     } else if (process.platform === "darwin") {
-      spawn("open", [row.folderPath], { detached: true }).unref();
+      const args = row.isArchive ? ["-R", row.folderPath] : [row.folderPath];
+      spawn("open", args, { detached: true }).unref();
     } else {
-      spawn("xdg-open", [row.folderPath], { detached: true }).unref();
+      // No portable "reveal" on Linux; open the containing directory.
+      const target = row.isArchive ? path.dirname(row.folderPath) : row.folderPath;
+      spawn("xdg-open", [target], { detached: true }).unref();
     }
     return { ok: true };
   } catch (err) {

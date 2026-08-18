@@ -5,7 +5,13 @@ import { FolderOpen } from "lucide-react";
 import { revealWorkFolder } from "@/lib/actions";
 import { useTranslations } from "@/lib/i18n/client";
 
-export function RevealFolderButton({ workId }: { workId: string }) {
+export function RevealFolderButton({
+  workId,
+  isArchive = false,
+}: {
+  workId: string;
+  isArchive?: boolean;
+}) {
   const { t } = useTranslations();
   const [pending, startTransition] = useTransition();
   return (
@@ -20,7 +26,7 @@ export function RevealFolderButton({ workId }: { workId: string }) {
       }}
       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
     >
-      {t("work.openFolder")}
+      {isArchive ? t("work.showArchive") : t("work.openFolder")}
       <FolderOpen className="h-3 w-3" />
     </button>
   );

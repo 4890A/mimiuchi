@@ -79,6 +79,8 @@ export interface UpsertWorkInput {
   folderPath: string;
   metadata?: NormalizedWork | null;
   coverPath?: string;
+  /** `folderPath` points at an archive file rather than an extracted folder. */
+  isArchive?: boolean;
 }
 
 export function upsertWork({
@@ -86,6 +88,7 @@ export function upsertWork({
   folderPath,
   metadata,
   coverPath,
+  isArchive = false,
 }: UpsertWorkInput): void {
   const circleId = metadata?.circleName
     ? upsertCircle(metadata.circleName, metadata.circleNameEn)
@@ -106,13 +109,18 @@ export function upsertWork({
     dlsiteUrl: metadata?.dlsiteUrl,
     nsfw: metadata?.nsfw ?? false,
     folderPath,
+    isArchive,
     metadataSource: metadata?.source,
     lastScannedAt: new Date(),
     lastMetadataSyncAt: metadata ? new Date() : undefined,
   };
 
+  // folderPath and isArchive move together and are rewritten on every scan,
+  // metadata or not: they are what tells an extracted work from one that is
+  // still packed, and a work flips between the two as the user unpacks it.
   const updateSet: Partial<NewWork> = {
     folderPath: values.folderPath,
+    isArchive: values.isArchive,
     lastScannedAt: values.lastScannedAt,
   };
   if (metadata) {
@@ -318,6 +326,7 @@ export interface WorkScanSnapshot {
   lastScannedAt: Date | null;
   coverPath: string | null;
   tagCount: number;
+  isArchive: boolean;
 }
 
 /** Bulk-load the per-work fields the scanner needs to decide whether a work
@@ -330,6 +339,7 @@ export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
       lastMetadataSyncAt: works.lastMetadataSyncAt,
       lastScannedAt: works.lastScannedAt,
       coverPath: works.coverPath,
+      isArchive: works.isArchive,
       tagCount: sql<number>`(SELECT COUNT(*) FROM work_tags WHERE work_tags.work_id = ${works.id})`.as("tag_count"),
     })
     .from(works)
@@ -342,6 +352,7 @@ export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
       lastScannedAt: r.lastScannedAt,
       coverPath: r.coverPath,
       tagCount: r.tagCount,
+      isArchive: r.isArchive,
     });
   }
   return out;

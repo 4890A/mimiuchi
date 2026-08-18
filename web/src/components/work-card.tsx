@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { FileArchive } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { coverSrc } from "@/lib/cover";
+import { cn } from "@/lib/utils";
+import { archiveLabel } from "@/lib/metadata/types";
 import type { WorkSummary } from "@/lib/db/queries";
 
 export function WorkCard({ work }: { work: WorkSummary }) {
@@ -9,7 +12,14 @@ export function WorkCard({ work }: { work: WorkSummary }) {
   const tagShown = work.tags.slice(0, 3);
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
+    <div
+      className={cn(
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg",
+        // Still packed: tinted so it reads as "there is nothing to play here
+        // yet" at a glance in the grid.
+        work.isArchive && "border-destructive/30 bg-destructive/10",
+      )}
+    >
       <Link
         href={`/works/${work.id}`}
         data-nsfw-cover={work.nsfw ? "true" : undefined}
@@ -32,6 +42,16 @@ export function WorkCard({ work }: { work: WorkSummary }) {
             className="absolute right-2 top-2 backdrop-blur"
           >
             R18
+          </Badge>
+        )}
+        {work.isArchive && work.archiveName && (
+          <Badge
+            variant="destructive"
+            title={work.archiveName}
+            className="absolute left-2 top-2 gap-1 backdrop-blur"
+          >
+            <FileArchive className="h-3 w-3" />
+            {archiveLabel(work.archiveName)}
           </Badge>
         )}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />

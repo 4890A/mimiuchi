@@ -1,5 +1,6 @@
 import "server-only";
 import fs from "node:fs";
+import path from "node:path";
 import { eq, desc, sql, asc, inArray, and } from "drizzle-orm";
 import { db, sqlite } from "./client";
 import { searchWorkIdsForQuery } from "../search/index-builder";
@@ -25,6 +26,10 @@ export interface WorkSummary {
   tags: { id: number; name: string }[];
   releaseDate: string | null;
   nsfw: boolean;
+  /** Still packed in a .zip/.rar/.7z — shown, but with nothing to play. */
+  isArchive: boolean;
+  /** Basename of the archive file, for the badge. Null unless `isArchive`. */
+  archiveName: string | null;
 }
 
 export interface LibraryFilters {
@@ -60,6 +65,8 @@ export async function listWorksFiltered(
       coverPath: works.coverPath,
       releaseDate: works.releaseDate,
       nsfw: works.nsfw,
+      isArchive: works.isArchive,
+      folderPath: works.folderPath,
       createdAt: works.createdAt,
     })
     .from(works)
@@ -165,6 +172,8 @@ export async function listWorksFiltered(
     tags: tagsByWork.get(r.id) ?? [],
     releaseDate: r.releaseDate ?? null,
     nsfw: r.nsfw,
+    isArchive: r.isArchive,
+    archiveName: r.isArchive ? path.basename(r.folderPath) : null,
   }));
 }
 
@@ -183,6 +192,8 @@ export function getWorkDetail(workId: string) {
       coverPath: works.coverPath,
       dlsiteUrl: works.dlsiteUrl,
       nsfw: works.nsfw,
+      isArchive: works.isArchive,
+      folderPath: works.folderPath,
       circleName: circles.name,
       circleId: circles.id,
     })
@@ -441,6 +452,9 @@ export function listRandomWorks(limit = 8): RecentWork[] {
     })
     .from(works)
     .leftJoin(circles, eq(works.circleId, circles.id))
+    // "On deck" is a play shortcut, so works still packed in an archive have
+    // no business being shuffled into it.
+    .where(eq(works.isArchive, false))
     .orderBy(sql`RANDOM()`)
     .limit(limit)
     .all();

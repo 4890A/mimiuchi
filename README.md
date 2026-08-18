@@ -12,6 +12,7 @@ A personal audio library web app for browsing and playing locally-stored audio w
 **Library**
 
 - Scans one or more local folders of RJ-coded works and pulls titles, cover art, circle, voice actors, and tags automatically
+- Works still packed in a `.zip`, `.rar`, or `.7z` are listed too, with their full metadata and a red tint to mark that there is nothing to play yet — extract the archive and re-scan and the entry becomes the real thing, no duplicate left behind
 - Browse by work, by voice actor, or by circle
 - Filter by tag, voice actor, and circle, with sorting
 - Fuzzy Japanese search with autocomplete — type romaji, kana, or kanji and it finds the match
@@ -39,7 +40,7 @@ A personal audio library web app for browsing and playing locally-stored audio w
 
 - Node.js 20+
 - [pnpm](https://pnpm.io/installation)
-- A directory of audio works named by DLsite RJ code (e.g. `RJ01000380/...`)
+- A directory of audio works named by DLsite RJ code (e.g. `RJ01000380/...`), or archives named the same way (e.g. `【RJ01000380】【MP3】.zip`)
 - `ffmpeg` on your `PATH` — optional, only needed for the waveform seek bar (or point `KIKOERU_FFMPEG_PATH` at the binary)
 
 ## Setup

@@ -53,7 +53,14 @@ export const works = sqliteTable(
     coverPath: text("cover_path"),
     dlsiteUrl: text("dlsite_url"),
     nsfw: integer("nsfw", { mode: "boolean" }).notNull().default(false),
+    /** Where the work lives on disk: its directory, or — when `isArchive` —
+     *  the .zip/.rar/.7z file it is still packed in. */
     folderPath: text("folder_path").notNull(),
+    /** The work was found only as an archive, so it has no playable tracks
+     *  yet. Cleared by the next scan that finds an extracted folder for it. */
+    isArchive: integer("is_archive", { mode: "boolean" })
+      .notNull()
+      .default(false),
     metadataSource: text("metadata_source"),
     lastScannedAt: integer("last_scanned_at", { mode: "timestamp_ms" }),
     lastMetadataSyncAt: integer("last_metadata_sync_at", {

@@ -1,0 +1,1 @@
+ALTER TABLE `works` ADD `is_archive` integer DEFAULT false NOT NULL;

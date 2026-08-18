@@ -25,6 +25,32 @@ export function extractWorkId(input: string): string | null {
   return m ? m[0].toUpperCase() : null;
 }
 
+/**
+ * Archive containers a work can still be packed in.
+ *
+ * DLsite downloads arrive as one of these, and a lot of libraries keep the
+ * untouched archive next to (or instead of) the extracted folder. The scanner
+ * indexes them so the work is visible with its metadata, even though nothing
+ * inside is playable until it is extracted.
+ *
+ * Continuation parts of a split set (`.r00`, `.zip.001`) are not listed, and
+ * do not need to be: works are keyed by id, so a set whose parts all end in a
+ * listed extension still collapses to the single entry we want.
+ */
+export const ARCHIVE_EXTS = [".zip", ".rar", ".7z"] as const;
+
+/** True for a filename that looks like one of the archive containers above. */
+export function isArchiveFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return ARCHIVE_EXTS.some((ext) => lower.endsWith(ext));
+}
+
+/** `【RJ01648943】【MP3】.zip` -> `ZIP`, for the badge on an archived work. */
+export function archiveLabel(filename: string): string {
+  const ext = filename.slice(filename.lastIndexOf(".") + 1);
+  return ext.toUpperCase();
+}
+
 export function coverBucket(workId: string): string {
   const m = workId.match(/^([A-Z]+)(\d+)$/);
   if (!m) return workId;

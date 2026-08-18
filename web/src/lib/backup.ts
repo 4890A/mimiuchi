@@ -5,7 +5,7 @@ import path from "node:path";
 import { sqlite } from "./db/client";
 import { resolveLibraryRoots, resolveCoversDir } from "./config";
 import { getSettings } from "./settings";
-import { extractWorkId } from "./metadata/types";
+import { extractWorkId, isArchiveFile } from "./metadata/types";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache } from "./db/queries";
 
@@ -292,27 +292,39 @@ export async function* streamBackup(): AsyncGenerator<string> {
 /** Mirrors the scanner's folder discovery depth. */
 const RJ_SCAN_DEPTH = 4;
 
+/** Where a work id was found, mirroring the scanner's `WorkEntry`. */
+interface RjEntry {
+  path: string;
+  isArchive: boolean;
+}
+
 interface RjScanResult {
-  map: Map<string, string>;
+  map: Map<string, RjEntry>;
   /** Work id -> every directory that claimed it, when more than one did. */
   duplicates: Map<string, string[]>;
 }
 
 function scanRjPaths(libraryRoots: string[]): RjScanResult {
-  const map = new Map<string, string>();
+  const map = new Map<string, RjEntry>();
   const duplicates = new Map<string, string[]>();
 
-  function record(id: string, full: string): void {
+  function record(id: string, entry: RjEntry): void {
     const existing = map.get(id);
     if (existing === undefined) {
-      map.set(id, full);
+      map.set(id, entry);
       return;
     }
-    if (existing === full) return;
+    if (existing.path === entry.path) return;
+    // An extracted folder beats an archive of the same work, exactly as in the
+    // scanner, and the pair is not a conflict worth reporting.
+    if (existing.isArchive !== entry.isArchive) {
+      if (existing.isArchive) map.set(id, entry);
+      return;
+    }
     // First match wins, matching the scanner. Remember the rest so restore can
     // tell the user which library root it picked.
-    const seen = duplicates.get(id) ?? [existing];
-    seen.push(full);
+    const seen = duplicates.get(id) ?? [existing.path];
+    seen.push(entry.path);
     duplicates.set(id, seen);
   }
 
@@ -325,10 +337,16 @@ function scanRjPaths(libraryRoots: string[]): RjScanResult {
       return;
     }
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
       const full = path.join(dir, entry.name);
+      if (entry.isFile()) {
+        if (!isArchiveFile(entry.name)) continue;
+        const id = extractWorkId(entry.name);
+        if (id) record(id, { path: full, isArchive: true });
+        continue;
+      }
+      if (!entry.isDirectory()) continue;
       const id = extractWorkId(entry.name);
-      if (id) record(id, full);
+      if (id) record(id, { path: full, isArchive: false });
       else walk(full, depth + 1);
     }
   }
@@ -338,14 +356,16 @@ function scanRjPaths(libraryRoots: string[]): RjScanResult {
 }
 
 /**
- * Maps every work id found under `libraryRoots` to its absolute directory.
+ * Maps every work id found under `libraryRoots` to its absolute path — the
+ * work's directory, or the archive file it is still packed in.
  *
  * Restoring onto a different machine (or after reorganising the library) only
  * needs the RJ code to line up — the stored absolute path is rebuilt from
  * whatever the folder lives at now.
  */
 export function buildRjPathMap(libraryRoots: string[]): Map<string, string> {
-  return scanRjPaths(libraryRoots).map;
+  const { map } = scanRjPaths(libraryRoots);
+  return new Map(Array.from(map, ([id, entry]) => [id, entry.path]));
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +489,7 @@ function makeImporter(
 }
 
 interface WorkRemap {
-  rjPathMap: Map<string, string>;
+  rjPathMap: Map<string, RjEntry>;
   duplicates: Map<string, string[]>;
   coversDir: string;
   /** Work id -> cover filename carried by this backup. */
@@ -481,9 +501,11 @@ interface WorkRemap {
 /**
  * Rewrites the machine-specific paths on a works row.
  *
- * `folder_path` follows the RJ directory wherever it now lives; `cover_path`
- * is rebuilt against this machine's covers directory, since the image itself
- * travels inside the backup.
+ * `folder_path` follows the RJ directory wherever it now lives — and with it
+ * `is_archive`, since this machine may hold the extracted folder where the
+ * backup had the archive, or the reverse. `cover_path` is rebuilt against this
+ * machine's covers directory, since the image itself travels inside the
+ * backup.
  */
 function remapWorkRow(row: BackupRow, ctx: WorkRemap): BackupRow {
   const id = typeof row.id === "string" ? row.id : null;
@@ -494,8 +516,9 @@ function remapWorkRow(row: BackupRow, ctx: WorkRemap): BackupRow {
   if ("folder_path" in out) {
     const found = ctx.rjPathMap.get(id);
     if (found) {
-      if (found !== out.folder_path) ctx.remapped++;
-      out.folder_path = found;
+      if (found.path !== out.folder_path) ctx.remapped++;
+      out.folder_path = found.path;
+      if ("is_archive" in out) out.is_archive = found.isArchive ? 1 : 0;
     } else {
       ctx.notFound.push(id);
     }

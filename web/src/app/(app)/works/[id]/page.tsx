@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Calendar, Disc, Globe, ShieldAlert, Tag as TagIcon } from "lucide-react";
+import {
+  ExternalLink,
+  Calendar,
+  Disc,
+  Globe,
+  ShieldAlert,
+  FileArchive,
+  Tag as TagIcon,
+} from "lucide-react";
+import path from "node:path";
 import { getWorkDetail } from "@/lib/db/queries";
 import { coverSrc } from "@/lib/cover";
 import { TrackList } from "@/components/track-row";
@@ -58,6 +67,16 @@ export default async function WorkPage({
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-1">
               <p className="font-mono text-xs text-muted-foreground">{work.id}</p>
+              {work.isArchive && (
+                <p className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+                  <FileArchive className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {t("work.archived", {
+                      file: path.basename(work.folderPath),
+                    })}
+                  </span>
+                </p>
+              )}
               <h1 className="text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
                 {work.title}
               </h1>
@@ -166,7 +185,7 @@ export default async function WorkPage({
                   coverUrl: work.coverUrl,
                 }}
               />
-              <RevealFolderButton workId={work.id} />
+              <RevealFolderButton workId={work.id} isArchive={work.isArchive} />
               <DeleteWorkButton workId={work.id} workTitle={work.title} />
             </div>
             {work.description && (
@@ -186,7 +205,7 @@ export default async function WorkPage({
           </h2>
           {work.tracks.length === 0 ? (
             <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-              {t("work.noTracks")}
+              {work.isArchive ? t("work.noTracksArchived") : t("work.noTracks")}
             </div>
           ) : (
             <TrackList

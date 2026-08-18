@@ -171,14 +171,14 @@ The scanner already discovers works by walking library roots and looking for dir
 
 During restore:
 
-1. **Before import**, walk all current library roots (from `resolveLibraryRoots()`) and find every directory matching the RJ-code regex.
+1. **Before import**, walk all current library roots (from `resolveLibraryRoots()`) and find every directory matching the RJ-code regex, plus every `.zip`/`.rar`/`.7z` file whose name carries an RJ code — a work may still be packed on this machine.
 2. **Build a map**:
    ```
    { "RJ01000380": "C:\\media\\RJ01000380", "RJ01000381": "D:\\archives\\RJ01000381" }
    ```
 3. **During works import**, for each work:
    - Look up `work.id` (which is the RJ code, e.g. `"RJ01000380"`) in the map
-   - **If found:** Replace `folder_path` with the matched absolute path
+   - **If found:** Replace `folder_path` with the matched absolute path, and set `is_archive` to whether that path is an archive file rather than a directory (this machine may hold the extracted folder where the backup had the archive, or the reverse)
    - **If not found:** Keep the old path, flag the work as "not found on disk" in the summary
 4. **Covers**: `cover_path` is **always regenerated** — it is set to `<coversDir>/<workId>.jpg` (or the appropriate extension). No remapping needed since the cover file is embedded in the backup.
 5. **Tracks**: No remapping needed — `relative_path` is relative to `folder_path`, so once `folder_path` is correct, tracks are correct.
@@ -186,7 +186,7 @@ During restore:
 
 ### Duplicate RJ codes
 
-If the same RJ code appears in multiple library roots, the first found path is used. A warning is emitted in the summary.
+If the same RJ code appears in multiple library roots, the first found path is used. A warning is emitted in the summary. An extracted folder and an archive of the same work are not a conflict — the folder wins, silently, exactly as in the scanner.
 
 ### Benefits of this approach
 

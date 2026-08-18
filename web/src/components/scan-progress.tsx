@@ -107,7 +107,7 @@ export function useScanProgress(): {
             : t("scan.status.newWork", { id: ev.workId }),
           log: pushLog(
             prev,
-            `[${ev.index}/${ev.total}] ${ev.workId}${ev.hadExisting ? "" : t("scan.log.newSuffix")}`,
+            `[${ev.index}/${ev.total}] ${ev.workId}${ev.hadExisting ? "" : t("scan.log.newSuffix")}${ev.isArchive ? t("scan.log.archiveSuffix") : ""}`,
           ),
         };
       case "fetch-meta":

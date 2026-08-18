@@ -78,6 +78,14 @@ function makeWork(folder: string, files: string[]): string {
   return dir;
 }
 
+/** Creates `<libraryRoot>/<name>` as a dummy archive file. */
+function makeArchive(name: string): string {
+  const full = path.join(libraryRoot, name);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, Buffer.alloc(64, 2));
+  return full;
+}
+
 /** Queues the DLsite metadata + cover replies for a successful lookup. */
 function stubDlsite(times = 1): void {
   net.reply(DLSITE, API(WORK_ID), FIXTURE, { times });
@@ -282,6 +290,133 @@ test("the first library root wins when a work appears in two", async () => {
   } finally {
     fs.rmSync(second, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Archives
+// ---------------------------------------------------------------------------
+
+test("indexes a work that is still packed in a zip", async () => {
+  const archive = makeArchive(`【${WORK_ID}】【MP3】【2026-08-03】.zip`);
+  stubDlsite();
+
+  const result = await scan().run;
+
+  assert.equal(result.worksFound, 1);
+  assert.equal(result.worksNew, 1);
+  assert.equal(result.tracksScanned, 0, "there is nothing to index inside it");
+  assert.equal(result.metadataFetched, 1, "metadata comes from the id alone");
+
+  const work = workRow(WORK_ID);
+  assert.equal(work?.is_archive, 1);
+  assert.equal(work?.folder_path, archive, "the path points at the file itself");
+  assert.equal(work?.title, "【ブルーアーカイブ】セイアASMR～太陽と月と言葉と君の～");
+  assert.equal(work?.cover_path, path.join(coversDir, `${WORK_ID}.jpg`));
+});
+
+test("recognises rar and 7z, and ignores other loose files", async () => {
+  makeArchive("RJ236823.rar");
+  makeArchive("RJ111111.7z");
+  makeArchive("RJ222222.txt");
+  makeArchive("no-id-here.zip");
+  stubMissing("RJ236823", "RJ00236823", "RJ111111", "RJ00111111");
+
+  const result = await scan().run;
+  assert.equal(result.worksFound, 2);
+  assert.equal(workRow("RJ236823")?.is_archive, 1);
+  assert.equal(workRow("RJ111111")?.is_archive, 1);
+  assert.equal(workRow("RJ222222"), undefined);
+});
+
+test("finds archives nested under other directories", async () => {
+  makeArchive(path.join("inbox", "2026", `${WORK_ID}.zip`));
+  stubDlsite();
+
+  const result = await scan().run;
+  assert.equal(result.worksFound, 1);
+  assert.equal(workRow(WORK_ID)?.is_archive, 1);
+});
+
+test("the extracted folder wins while the archive is still there", async () => {
+  makeArchive(`${WORK_ID}.zip`);
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+
+  const result = await scan().run;
+
+  assert.equal(result.worksFound, 1, "one work, not one per copy");
+  const work = workRow(WORK_ID);
+  assert.equal(work?.is_archive, 0);
+  assert.equal(work?.folder_path, path.join(libraryRoot, WORK_ID));
+  assert.deepEqual(trackPaths(WORK_ID), ["01 Intro.mp3"]);
+});
+
+test("extracting an archived work replaces the entry instead of duplicating it", async () => {
+  makeArchive(`${WORK_ID}.zip`);
+  stubDlsite();
+  await scan().run;
+  assert.equal(workRow(WORK_ID)?.is_archive, 1);
+
+  // The user extracts the archive and deletes it, then re-scans.
+  fs.rmSync(path.join(libraryRoot, `${WORK_ID}.zip`));
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+
+  const result = await scan().run;
+
+  assert.equal(
+    (sqlite.prepare(`SELECT COUNT(*) AS n FROM works`).get() as { n: number }).n,
+    1,
+    "the work is keyed by its id, so there is nothing to duplicate",
+  );
+  assert.equal(result.worksSkipped, 0, "packed -> extracted is never skipped");
+  const work = workRow(WORK_ID);
+  assert.equal(work?.is_archive, 0);
+  assert.equal(work?.folder_path, path.join(libraryRoot, WORK_ID));
+  assert.deepEqual(trackPaths(WORK_ID), ["01 Intro.mp3"]);
+});
+
+test("re-packing a work keeps its tracks, likes and progress", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+  await scan().run;
+
+  const trackId = (
+    sqlite.prepare(`SELECT id FROM tracks WHERE work_id = ?`).get(WORK_ID) as {
+      id: number;
+    }
+  ).id;
+  sqlite.prepare(`INSERT INTO likes (track_id) VALUES (?)`).run(trackId);
+
+  // The folder goes away; only the archive is left.
+  fs.rmSync(path.join(libraryRoot, WORK_ID), { recursive: true });
+  makeArchive(`${WORK_ID}.zip`);
+
+  const result = await scan().run;
+
+  assert.equal(result.worksSkipped, 0);
+  assert.equal(workRow(WORK_ID)?.is_archive, 1);
+  assert.deepEqual(
+    trackPaths(WORK_ID),
+    ["01 Intro.mp3"],
+    "pruning here would cascade the likes away with the tracks",
+  );
+  assert.equal(
+    (
+      sqlite.prepare(`SELECT COUNT(*) AS n FROM likes`).get() as { n: number }
+    ).n,
+    1,
+  );
+});
+
+test("a second scan skips an unchanged archive", async () => {
+  makeArchive(`${WORK_ID}.zip`);
+  stubDlsite();
+  await scan().run;
+
+  // No interceptors queued: a network call now would fail the test.
+  const result = await scan().run;
+  assert.equal(result.worksSkipped, 1);
+  assert.equal(result.metadataFetched, 0);
 });
 
 // ---------------------------------------------------------------------------

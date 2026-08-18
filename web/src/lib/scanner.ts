@@ -1,7 +1,7 @@
 import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { extractWorkId } from "./metadata/types";
+import { extractWorkId, isArchiveFile } from "./metadata/types";
 import { fetchMetadata, downloadCover } from "./metadata";
 import {
   upsertWork,
@@ -35,8 +35,10 @@ export type ScanEvent =
       workId: string;
       index: number;
       total: number;
+      /** The work's folder, or its archive file when `isArchive`. */
       folder: string;
       hadExisting: boolean;
+      isArchive: boolean;
     }
   | { type: "fetch-meta"; workId: string }
   | {
@@ -98,8 +100,34 @@ async function* walk(dir: string, depth = 0): AsyncGenerator<string> {
   }
 }
 
-async function findWorkFolders(root: string): Promise<Map<string, string>> {
-  const found = new Map<string, string>();
+/** A work as found on disk: an extracted folder, or the archive holding it. */
+export interface WorkEntry {
+  path: string;
+  isArchive: boolean;
+}
+
+/**
+ * Records a discovery, letting an extracted folder win over an archive.
+ *
+ * A library in mid-unpack has both — the folder the user just extracted and
+ * the .zip they haven't deleted yet. The folder is the one with playable
+ * files, so it takes the slot regardless of which turned up first, and the
+ * archive is dropped. Between two of the same kind the first still wins, so
+ * root order keeps deciding duplicates.
+ */
+function recordEntry(
+  found: Map<string, WorkEntry>,
+  id: string,
+  entry: WorkEntry,
+): void {
+  const existing = found.get(id);
+  if (!existing || (existing.isArchive && !entry.isArchive)) {
+    found.set(id, entry);
+  }
+}
+
+async function findWorkEntries(root: string): Promise<Map<string, WorkEntry>> {
+  const found = new Map<string, WorkEntry>();
   async function scan(dir: string, depth: number): Promise<void> {
     if (depth > 4) return;
     let entries;
@@ -109,11 +137,17 @@ async function findWorkFolders(root: string): Promise<Map<string, string>> {
       return;
     }
     for (const e of entries) {
-      if (!e.isDirectory()) continue;
       const full = path.join(dir, e.name);
+      if (e.isFile()) {
+        if (!isArchiveFile(e.name)) continue;
+        const id = extractWorkId(e.name);
+        if (id) recordEntry(found, id, { path: full, isArchive: true });
+        continue;
+      }
+      if (!e.isDirectory()) continue;
       const id = extractWorkId(e.name);
-      if (id && !found.has(id)) {
-        found.set(id, full);
+      if (id) {
+        recordEntry(found, id, { path: full, isArchive: false });
       } else {
         await scan(full, depth + 1);
       }
@@ -147,7 +181,7 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   };
   const emit = (e: ScanEvent) => opts.onEvent?.(e);
 
-  const workFolders = new Map<string, string>();
+  const workEntries = new Map<string, WorkEntry>();
   if (opts.libraryRoots.length === 0) {
     const message = "No library roots configured";
     result.errors.push(message);
@@ -157,10 +191,12 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
   for (const root of opts.libraryRoots) {
     try {
-      const found = await findWorkFolders(root);
-      for (const [id, folder] of found) {
-        // First root that contains a work wins; later duplicates are skipped.
-        if (!workFolders.has(id)) workFolders.set(id, folder);
+      const found = await findWorkEntries(root);
+      for (const [id, entry] of found) {
+        // First root that contains a work wins; later duplicates are skipped,
+        // unless the duplicate is the extracted copy of an archive we already
+        // have — see recordEntry.
+        recordEntry(workEntries, id, entry);
       }
     } catch (err) {
       const message = `Failed to read library root ${root}: ${String(err)}`;
@@ -170,12 +206,12 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
 
   if (opts.filterIds) {
-    for (const id of workFolders.keys()) {
-      if (!opts.filterIds.has(id)) workFolders.delete(id);
+    for (const id of workEntries.keys()) {
+      if (!opts.filterIds.has(id)) workEntries.delete(id);
     }
   }
 
-  result.worksFound = workFolders.size;
+  result.worksFound = workEntries.size;
 
   // Quick-skip: for incremental scans (not forceMetadata, not filterIds),
   // drop works that are already fully indexed and whose folder mtime hasn't
@@ -188,15 +224,18 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   if (snapshots) {
     const toSkip: string[] = [];
     await Promise.all(
-      Array.from(workFolders.entries()).map(async ([id, folder]) => {
+      Array.from(workEntries.entries()).map(async ([id, entry]) => {
         const snap = snapshots.get(id);
         if (!snap) return; // new work — must scan
         if (!snap.metadataSource || !snap.lastMetadataSyncAt) return;
         if (snap.tagCount === 0) return;
         if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
         if (!snap.lastScannedAt) return;
+        // Packed <-> extracted is a change the mtime check can miss: an
+        // archive's own mtime predates the scan that first recorded it.
+        if (snap.isArchive !== entry.isArchive) return;
         try {
-          const st = await fs.stat(folder);
+          const st = await fs.stat(entry.path);
           if (st.mtimeMs > snap.lastScannedAt.getTime()) return;
         } catch {
           return;
@@ -204,15 +243,17 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         toSkip.push(id);
       }),
     );
-    for (const id of toSkip) workFolders.delete(id);
+    for (const id of toSkip) workEntries.delete(id);
     result.worksSkipped = toSkip.length;
   }
 
-  const total = workFolders.size;
+  const total = workEntries.size;
   emit({ type: "start", total, libraryRoots: opts.libraryRoots });
 
   let index = 0;
-  for (const [workId, folder] of workFolders) {
+  for (const [workId, entry] of workEntries) {
+    // The work's directory, or — for an archive entry — the container file.
+    const workPath = entry.path;
     index++;
     try {
       const existing = getWorkById(workId);
@@ -232,8 +273,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         workId,
         index,
         total,
-        folder,
+        folder: workPath,
         hadExisting: Boolean(existing),
+        isArchive: entry.isArchive,
       });
 
       let metadata = null;
@@ -271,15 +313,36 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         emit({ type: "meta-skipped", workId });
       }
 
-      upsertWork({ id: workId, folderPath: folder, metadata, coverPath });
+      upsertWork({
+        id: workId,
+        folderPath: workPath,
+        metadata,
+        coverPath,
+        isArchive: entry.isArchive,
+      });
       if (!existing) result.worksNew++;
+
+      if (entry.isArchive) {
+        // Nothing to index inside the container, and nothing to prune either:
+        // any tracks on record are from an earlier extracted copy, and pruning
+        // them would cascade away their likes and playback progress and strand
+        // their bookmarks. They cost nothing while the work is packed, and are
+        // still there — matched by relative path — once it is unpacked again.
+        emit({
+          type: "work-done",
+          workId,
+          title: metadata?.title ?? existing?.title ?? undefined,
+          hasCover: Boolean(coverPath),
+        });
+        continue;
+      }
 
       const keptPaths: string[] = [];
       let workTracks = 0;
-      for await (const filePath of walk(folder)) {
+      for await (const filePath of walk(workPath)) {
         const ext = path.extname(filePath).toLowerCase();
         if (!AUDIO_EXTS.has(ext)) continue;
-        const rel = path.relative(folder, filePath);
+        const rel = path.relative(workPath, filePath);
         const stat = await fs.stat(filePath).catch(() => null);
         const { title, trackNumber } = makeTrackTitle(path.basename(filePath));
         upsertTrack({
