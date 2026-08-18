@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { coverSrc } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 import { archiveLabel } from "@/lib/metadata/types";
+import { MoreTags } from "@/components/more-tags";
+import { TAG_CHIP_CLASS } from "@/lib/tag-chip";
 import type { WorkSummary } from "@/lib/db/queries";
 
 /**
@@ -29,7 +31,8 @@ export function WorkCard({
 }) {
   const vaShown = work.voiceActors.slice(0, 3);
   const vaExtra = work.voiceActors.length - vaShown.length;
-  const tagShown = work.tags.slice(0, 3);
+  const tagShown = work.tags.slice(0, 4);
+  const tagRest = work.tags.slice(4);
 
   return (
     <div
@@ -118,11 +121,18 @@ export function WorkCard({
               <Link
                 key={t.id}
                 href={filterHref(query, "tags", t.id)}
-                className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                className={TAG_CHIP_CLASS}
               >
                 {t.name}
               </Link>
             ))}
+            <MoreTags
+              tags={tagRest.map((t) => ({
+                id: t.id,
+                name: t.name,
+                href: filterHref(query, "tags", t.id),
+              }))}
+            />
           </div>
         )}
       </div>

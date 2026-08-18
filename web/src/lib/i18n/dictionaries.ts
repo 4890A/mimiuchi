@@ -130,6 +130,8 @@ export const en = {
   "work.archived": "Still packed in {file} — extract it to play this work.",
   "work.openFolder": "Open folder",
   "work.showArchive": "Show archive",
+  "work.moreTags": "{count} more tags",
+  "work.moreTags_one": "1 more tag",
   "work.openFolderFailed": "Couldn’t open folder: {error}",
 
   // ── Tracks ────────────────────────────────────────────────────────────────
@@ -505,6 +507,8 @@ export const ja: Record<TranslationKey, string> = {
   "work.archived": "{file} に圧縮されたままです。展開すると再生できます。",
   "work.openFolder": "フォルダーを開く",
   "work.showArchive": "書庫を表示",
+  "work.moreTags": "他{count}件のジャンル",
+  "work.moreTags_one": "他1件のジャンル",
   "work.openFolderFailed": "フォルダーを開けませんでした：{error}",
 
   // ── Tracks ────────────────────────────────────────────────────────────────
