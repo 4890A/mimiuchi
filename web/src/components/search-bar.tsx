@@ -25,18 +25,11 @@ const TYPE_LABEL_KEYS: Record<Suggestion["type"], TranslationKey> = {
 
 const TYPE_ORDER: Suggestion["type"][] = ["seiyuu", "circle", "tag", "work"];
 
-function suggestionHref(s: Suggestion): string {
-  switch (s.type) {
-    case "seiyuu":
-      return `/?va=${s.id}`;
-    case "circle":
-      return `/?circles=${s.id}`;
-    case "tag":
-      return `/?tags=${s.id}`;
-    case "work":
-      return `/works/${s.id}`;
-  }
-}
+const PARAM_BY_TYPE: Record<"seiyuu" | "circle" | "tag", string> = {
+  seiyuu: "va",
+  circle: "circles",
+  tag: "tags",
+};
 
 function TypeIcon({ type }: { type: Suggestion["type"] }) {
   const cls = "h-3.5 w-3.5";
@@ -189,7 +182,27 @@ export function SearchBar() {
   function selectSuggestion(s: Suggestion) {
     setOpen(false);
     setQ("");
-    startTransition(() => router.push(suggestionHref(s)));
+    // Works navigate to their own page; everything else is a filter, so keep
+    // the current filters and merge the suggestion into its own list instead
+    // of replacing the whole query (mirrors the dedicated filter menu).
+    if (s.type === "work") {
+      startTransition(() => router.push(`/works/${s.id}`));
+      return;
+    }
+    const usp = new URLSearchParams(params.toString());
+    usp.delete("q");
+    const paramKey = PARAM_BY_TYPE[s.type];
+    const id = Number(s.id);
+    const current = (usp.get(paramKey)?.split(",") ?? [])
+      .map(Number)
+      .filter(Number.isFinite);
+    const next = current.includes(id)
+      ? current.filter((x) => x !== id)
+      : [...current, id];
+    if (next.length) usp.set(paramKey, next.join(","));
+    else usp.delete(paramKey);
+    const qs = usp.toString();
+    startTransition(() => router.push(qs ? `/?${qs}` : "/"));
   }
 
   return (
