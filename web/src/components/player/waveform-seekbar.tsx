@@ -124,11 +124,14 @@ export function WaveformSeekbar({
   current,
   duration,
   onSeek,
+  className,
 }: {
   trackId: number | null;
   current: number;
   duration: number;
   onSeek: (s: number) => void;
+  /** Overrides the default full-bleed strip sizing (see the compact player). */
+  className?: string;
 }) {
   const { t } = useTranslations();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -248,6 +251,9 @@ export function WaveformSeekbar({
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging) return;
     setDragging(false);
+    // A finger never fires pointerleave, so the scrub bubble and its line
+    // would stay pinned where the drag ended. Clear them on release instead.
+    if (e.pointerType !== "mouse") setHoverPct(null);
     const v = seekFromEvent(e.clientX);
     setDragValue(null);
     onSeek(v);
@@ -275,6 +281,7 @@ export function WaveformSeekbar({
       className={cn(
         "group/wave relative h-10 w-full touch-none select-none sm:h-12",
         disabled ? "pointer-events-none" : "cursor-pointer",
+        className,
       )}
       role="slider"
       aria-valuemin={0}
