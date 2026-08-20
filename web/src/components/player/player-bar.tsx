@@ -222,13 +222,8 @@ export function PlayerBar() {
   // `t` is the current time in this component, so the translator takes a name.
   const { t: translate } = useTranslations();
   const { seekbarStyle } = usePlayerPrefs();
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   const waveformView = seekbarStyle === "waveform";
-
-  useEffect(() => {
-    p.audioRef.current = audioElRef.current;
-  }, [p.audioRef]);
 
   // Warm the next queue entry so skipping forward doesn't wait on a decode.
   // Delayed so it doesn't compete with the current track's own request.
@@ -239,27 +234,15 @@ export function PlayerBar() {
     return () => clearTimeout(timer);
   }, [waveformView, nextTrackId]);
 
-  if (!p.current) {
-    return <audio ref={audioElRef} preload="metadata" />;
-  }
+  // The <audio> decks live in the provider, not here — this component's tree
+  // comes and goes with the queue, and a re-created element would strand them.
+  if (!p.current) return null;
 
   const t = p.currentTime;
   const d = p.duration || p.current.durationSeconds || 0;
 
   return (
-    <>
-      <audio
-        ref={audioElRef}
-        preload="metadata"
-        onLoadedMetadata={(e) =>
-          p._onLoadedMetadata(e.currentTarget.duration || 0)
-        }
-        onTimeUpdate={(e) => p._setTime(e.currentTarget.currentTime)}
-        onPlay={() => p._setIsPlaying(true)}
-        onPause={() => p._setIsPlaying(false)}
-        onEnded={p._onEnded}
-      />
-      <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+    <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         {waveformView ? (
           <WaveformSeekbar
             key={p.current.id}
@@ -340,8 +323,7 @@ export function PlayerBar() {
             volume={p.volume}
             onChange={(v) => p.setVolume(v)}
           />
-        </div>
       </div>
-    </>
+    </div>
   );
 }
