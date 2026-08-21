@@ -20,6 +20,11 @@ import {
  */
 
 export type SeekbarStyle = "bar" | "waveform";
+/**
+ * Whether this device streams lossless tracks as they are, or asks the server
+ * for a compressed copy. See `lib/transcode` for why a phone wants the latter.
+ */
+export type WavPlayback = "original" | "compressed";
 export type { ResumeMode };
 
 interface Pref<T extends string> {
@@ -33,6 +38,12 @@ function createPref<T extends string>(
   storageKey: string,
   fallback: T,
   isValid: (v: unknown) => v is T,
+  /**
+   * Consulted when this browser has nothing stored yet, so a preference can
+   * default by device. Deliberately not used for the server snapshot: that
+   * stays `fallback` on every device, and the first client read corrects it.
+   */
+  clientDefault?: () => T,
 ): Pref<T> {
   /** Cached so the snapshot stays referentially stable between renders. */
   let cached: T | null = null;
@@ -42,9 +53,17 @@ function createPref<T extends string>(
     for (const listener of listeners) listener();
   }
 
+  function unset(): T {
+    try {
+      return clientDefault?.() ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   function onStorage(e: StorageEvent) {
     if (e.key !== storageKey) return;
-    cached = isValid(e.newValue) ? e.newValue : fallback;
+    cached = isValid(e.newValue) ? e.newValue : unset();
     notify();
   }
 
@@ -62,7 +81,7 @@ function createPref<T extends string>(
     if (cached !== null) return cached;
     try {
       const stored = window.localStorage.getItem(storageKey);
-      cached = isValid(stored) ? stored : fallback;
+      cached = isValid(stored) ? stored : unset();
     } catch {
       // Private mode / storage disabled — fall back to the default.
       cached = fallback;
@@ -102,6 +121,28 @@ const resumePref = createPref<ResumeMode>(
   isResumeMode,
 );
 
+const wavPlaybackPref = createPref<WavPlayback>(
+  "kikoeru.player.wavPlayback",
+  "original",
+  (v): v is WavPlayback => v === "original" || v === "compressed",
+  // Phones are what stall on a multi-megabit WAV once the screen goes off and
+  // the radio drops into power-save, so they get the small copy by default. A
+  // desktop on the same server has no such trouble and keeps the original.
+  () =>
+    window.matchMedia?.("(pointer: coarse)")?.matches
+      ? "compressed"
+      : "original",
+);
+
+/**
+ * Read outside of React, for the same reason as `getResumeMode`: the player
+ * builds an audio URL inside a callback.
+ */
+export function getWavPlayback(): WavPlayback {
+  if (typeof window === "undefined") return "original";
+  return wavPlaybackPref.get();
+}
+
 /**
  * Read outside of React: the player picks a start position inside a callback,
  * where re-rendering on a preference change would be pointless churn.
@@ -116,13 +157,18 @@ export function usePlayerPrefs(): {
   setSeekbarStyle: (style: SeekbarStyle) => void;
   resumeMode: ResumeMode;
   setResumeMode: (mode: ResumeMode) => void;
+  wavPlayback: WavPlayback;
+  setWavPlayback: (mode: WavPlayback) => void;
 } {
   const seekbarStyle = seekbarPref.useValue();
   const resumeMode = resumePref.useValue();
+  const wavPlayback = wavPlaybackPref.useValue();
   return {
     seekbarStyle,
     setSeekbarStyle: seekbarPref.set,
     resumeMode,
     setResumeMode: resumePref.set,
+    wavPlayback,
+    setWavPlayback: wavPlaybackPref.set,
   };
 }

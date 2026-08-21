@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { tracks, works } from "@/lib/db/schema";
 import { fileStream } from "@/lib/file-stream";
+import { ensureTranscode, isTranscodable } from "@/lib/transcode";
 
 const MIME: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -48,12 +49,27 @@ export async function GET(
     return new NextResponse("File missing on disk", { status: 410 });
   }
 
-  const contentType = MIME[row.extension.toLowerCase()] ?? "application/octet-stream";
-  const size = stat.size;
+  let servePath = filePath;
+  let contentType = MIME[row.extension.toLowerCase()] ?? "application/octet-stream";
+  let size = stat.size;
+
+  // `?t=1` asks for the small copy; the server decides whether this track's
+  // format is actually worth converting. Anything that goes wrong — no ffmpeg,
+  // a broken file, a timeout — falls through to the original, because a failed
+  // transcode must never cost the user playback.
+  if (req.nextUrl.searchParams.get("t") === "1" && isTranscodable(row.extension)) {
+    try {
+      const mp3 = await ensureTranscode(id, filePath, stat.size);
+      servePath = mp3;
+      contentType = "audio/mpeg";
+      size = (await fs.promises.stat(mp3)).size;
+    } catch {}
+  }
+
   const range = req.headers.get("range");
 
   if (!range) {
-    const stream = fs.createReadStream(filePath);
+    const stream = fs.createReadStream(servePath);
     return new NextResponse(fileStream(stream, req.signal), {
       status: 200,
       headers: {
@@ -76,7 +92,7 @@ export async function GET(
     });
   }
   const chunkSize = end - start + 1;
-  const stream = fs.createReadStream(filePath, { start, end });
+  const stream = fs.createReadStream(servePath, { start, end });
   return new NextResponse(fileStream(stream, req.signal), {
     status: 206,
     headers: {

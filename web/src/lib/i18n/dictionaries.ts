@@ -249,6 +249,16 @@ export const en = {
   "settings.playback.restart": "Always start from the beginning",
   "settings.playback.restartHint":
     "Ignores saved positions. Positions are still recorded, so progress bars and the other option keep working.",
+  "settings.playback.wav": "WAV quality",
+  "settings.playback.wavHint":
+    "WAV tracks are several megabits per second. Phones tend to stutter on them once the screen goes off and the radio powers down, so they get a compressed copy by default. Requires ffmpeg; without it the original plays regardless.",
+  "settings.playback.wavGroup": "WAV streaming quality",
+  "settings.playback.wavOriginal": "Stream the original",
+  "settings.playback.wavOriginalHint":
+    "Sends the file untouched. Best on a desktop or a wired connection, where the bandwidth is there anyway.",
+  "settings.playback.wavCompressed": "Send a smaller copy",
+  "settings.playback.wavCompressedHint":
+    "Converts to 192 kbps MP3, roughly a tenth of the size. Converted once per track and then cached, so the first play of a long WAV takes a few seconds to start.",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite",
@@ -633,6 +643,16 @@ export const ja: Record<TranslationKey, string> = {
   "settings.playback.restart": "常に先頭から再生する",
   "settings.playback.restartHint":
     "保存された位置を使いません。位置の記録は続くため、進行バーやもう一方の設定はそのまま機能します。",
+  "settings.playback.wav": "WAVの音質",
+  "settings.playback.wavHint":
+    "WAVは毎秒数メガビットあります。画面を消して通信が省電力状態に入るとスマートフォンでは音が途切れがちなため、既定では圧縮したものを配信します。ffmpegが必要で、無い場合は元のファイルをそのまま再生します。",
+  "settings.playback.wavGroup": "WAVの配信音質",
+  "settings.playback.wavOriginal": "元のまま配信する",
+  "settings.playback.wavOriginalHint":
+    "ファイルをそのまま送ります。帯域に余裕のあるデスクトップや有線接続に向いています。",
+  "settings.playback.wavCompressed": "小さくして配信する",
+  "settings.playback.wavCompressedHint":
+    "192kbpsのMP3に変換します。容量はおよそ10分の1です。トラックごとに一度だけ変換してキャッシュするため、長いWAVの初回再生は開始まで数秒かかります。",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite",

@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { isNearEnd, resumePosition } from "@/lib/resume";
-import { getResumeMode } from "./player-prefs";
+import { getResumeMode, getWavPlayback } from "./player-prefs";
 
 export interface QueueTrack {
   id: number;
@@ -46,7 +46,12 @@ interface PlayerActions {
 const PlayerContext = createContext<(PlayerState & PlayerActions) | null>(null);
 
 function audioUrl(trackId: number) {
-  return `/api/audio/${trackId}`;
+  // `t=1` opts into a compressed copy. The server decides whether this track's
+  // format is worth converting and falls back to the original if it isn't, so
+  // the flag is safe to send for every track.
+  return getWavPlayback() === "compressed"
+    ? `/api/audio/${trackId}?t=1`
+    : `/api/audio/${trackId}`;
 }
 
 /**
