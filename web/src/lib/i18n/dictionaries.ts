@@ -124,6 +124,7 @@ export const en = {
   "work.voiceActors": "Voice actors",
   "work.tags": "Tags",
   "work.viewOnDlsite": "View on DLsite",
+  "work.enlargeCover": "View cover full size",
   "work.tracks": "Tracks",
   "work.noTracks": "No audio files found in this work’s folder.",
   "work.noTracksArchived": "Nothing to play yet — extract the archive, then re-scan.",
@@ -258,7 +259,7 @@ export const en = {
     "Sends the file untouched. Best on a desktop or a wired connection, where the bandwidth is there anyway.",
   "settings.playback.wavCompressed": "Send a smaller copy",
   "settings.playback.wavCompressedHint":
-    "Converts to 192 kbps MP3, roughly a tenth of the size. Converted once per track and then cached, so the first play of a long WAV takes a few seconds to start.",
+    "Converts to 320 kbps MP3 — anywhere from half to a ninth of the original, depending on how the WAV was recorded. Converted once per track and then cached, so the first play of a long WAV takes a few seconds to start.",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite",
@@ -518,6 +519,7 @@ export const ja: Record<TranslationKey, string> = {
   "work.voiceActors": "声優",
   "work.tags": "ジャンル",
   "work.viewOnDlsite": "DLsiteで見る",
+  "work.enlargeCover": "ジャケットを拡大表示",
   "work.tracks": "トラック",
   "work.noTracks": "この作品のフォルダーに音声ファイルが見つかりません。",
   "work.noTracksArchived": "まだ再生できません。書庫を展開してから再スキャンしてください。",
@@ -652,7 +654,7 @@ export const ja: Record<TranslationKey, string> = {
     "ファイルをそのまま送ります。帯域に余裕のあるデスクトップや有線接続に向いています。",
   "settings.playback.wavCompressed": "小さくして配信する",
   "settings.playback.wavCompressedHint":
-    "192kbpsのMP3に変換します。容量はおよそ10分の1です。トラックごとに一度だけ変換してキャッシュするため、長いWAVの初回再生は開始まで数秒かかります。",
+    "320kbpsのMP3に変換します。容量は元の2分の1から9分の1程度で、WAVの録音形式によって変わります。トラックごとに一度だけ変換してキャッシュするため、長いWAVの初回再生は開始まで数秒かかります。",
 
   // ── Settings: proxy ───────────────────────────────────────────────────────
   "settings.proxy.title": "DLsite",

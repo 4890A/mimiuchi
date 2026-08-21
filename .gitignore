@@ -29,6 +29,8 @@ data/*.db-shm
 data/*.db-wal
 data/*.sqlite
 data/*.sqlite-*
+# Derived audio, rebuilt on demand — see lib/transcode.
+data/transcodes/
 covers/
 
 # playwright artifacts

@@ -8,11 +8,12 @@ import { FfmpegUnavailableError } from "@/lib/waveform";
 /**
  * On-demand MP3 copies of tracks that are too fat to stream to a phone.
  *
- * A WAV in this library runs anywhere from 1.4 to 2.9 Mbps. A phone that drops
+ * A WAV in this library runs anywhere from 0.7 to 2.9 Mbps. A phone that drops
  * its radio into power-save when the screen goes off cannot keep that fed, and
  * because the browser's media buffer is bounded in bytes rather than seconds, a
- * high bitrate also buys fewer seconds of slack to ride out the gap. The same
- * track at 192 kbps is an order of magnitude smaller and stops mattering.
+ * high bitrate also buys fewer seconds of slack to ride out the gap. Capping at
+ * 320 kbps buys back somewhere between two and nine times the buffered seconds,
+ * depending on how the source was recorded.
  *
  * The result is written to a file and then served through the ordinary
  * range-request path in the audio route. That is the whole reason this is a
@@ -27,16 +28,23 @@ import { FfmpegUnavailableError } from "@/lib/waveform";
  * Deleting the directory at any time is safe; entries are rebuilt on demand.
  */
 
-/** Transparent enough for voice work, ~16x smaller than a 24-bit source. */
-const BITRATE = "192k";
+/**
+ * The MP3 ceiling, and constant rather than variable on purpose. CBR makes byte
+ * offset a linear function of time, so a player seeks exactly; VBR needs the
+ * Xing TOC, which is 100 entries however long the file is — roughly 36-second
+ * granularity across an hour, interpolated. Fine for a pop song, not for a
+ * two-hour work with a waveform scrubber and bookmarks on it.
+ */
+const BITRATE = "320k";
 
 /** Give up rather than leaving an ffmpeg process wedged on a broken file. */
 const TIMEOUT_MS = 20 * 60 * 1000;
 
 /**
- * Ceiling for the whole cache. Converted tracks run 15-80 MB, so this holds a
- * few hundred of them — far more than anyone's actual rotation, while staying
- * a small fraction of the library it was derived from.
+ * Ceiling for the whole cache. At 320 kbps a converted track runs 25-135 MB,
+ * so this holds a few dozen of the long ones and many more short — comfortably
+ * past anyone's actual rotation, while staying a fraction of the library it
+ * was derived from.
  */
 const DEFAULT_CACHE_MB = 4096;
 
@@ -58,10 +66,13 @@ function ffmpegBin(): string {
 
 /**
  * Keyed by source size as well as track id, so a re-ripped or replaced file
- * gets a new cache entry instead of silently playing the old audio.
+ * gets a new cache entry instead of silently playing the old audio, and by
+ * bitrate, so changing `BITRATE` re-converts rather than serving whatever the
+ * previous setting produced. Entries from an older bitrate are swept up by
+ * `dropStaleSiblings` the first time their track is played again.
  */
 function cachePath(trackId: number, sourceSize: number): string {
-  return path.join(TRANSCODE_DIR, `${trackId}-${sourceSize}.mp3`);
+  return path.join(TRANSCODE_DIR, `${trackId}-${sourceSize}-${BITRATE}.mp3`);
 }
 
 /** `0` disables the ceiling entirely; anything unparseable falls back. */

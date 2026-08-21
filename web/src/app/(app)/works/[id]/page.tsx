@@ -13,6 +13,7 @@ import path from "node:path";
 import { getWorkDetail } from "@/lib/db/queries";
 import { coverSrc } from "@/lib/cover";
 import { TrackList } from "@/components/track-row";
+import { CoverLightbox } from "@/components/cover-lightbox";
 import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
@@ -56,13 +57,7 @@ export default async function WorkPage({
       <div className="mx-auto max-w-5xl px-3 py-6 sm:px-6 sm:py-10">
         <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
           <div className="mx-auto w-full max-w-[260px] shrink-0 sm:mx-0">
-            <div
-              data-nsfw-cover={work.nsfw ? "true" : undefined}
-              className="overflow-hidden rounded-xl border bg-card shadow-2xl shadow-black/20 ring-1 ring-black/5"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cover} alt={work.title} className="aspect-[4/3] w-full object-cover" />
-            </div>
+            <CoverLightbox src={cover} alt={work.title} nsfw={work.nsfw} />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-1">
