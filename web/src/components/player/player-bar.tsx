@@ -394,6 +394,60 @@ function timeLabelWidth(duration: number) {
   return "w-8";
 }
 
+/**
+ * The bar's outer shell, which also publishes its own height as
+ * `--player-bar-height` on the document element.
+ *
+ * The bar is `sticky bottom-0` in normal flow, so anything drawn as a
+ * full-viewport overlay covers it. The 台本 reader is the one such overlay that
+ * must not: reading along while the audio plays is the point of having it. It
+ * sits above `bottom: var(--player-bar-height)` instead, which needs a real
+ * measurement — the height differs between the compact and wide layouts, moves
+ * with the safe-area inset, and changes again when the waveform seek bar is on.
+ *
+ * The variable is cleared on unmount, so it reads 0 whenever the queue is empty
+ * and there is no bar at all.
+ */
+function PlayerBarShell({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = (height: number) =>
+      root.style.setProperty("--player-bar-height", `${Math.round(height)}px`);
+
+    // Measured once here rather than waiting on the observer's first callback.
+    // ResizeObserver delivers on an animation frame, and a background tab does
+    // not get those — so a reader opened in a tab that was never brought
+    // forward would size itself against a variable that is not there yet.
+    // `offsetHeight` is the border box, which is what an overlay stopping
+    // above the bar needs; the content box would leave its top border covered.
+    publish(el.offsetHeight);
+
+    const observer = new ResizeObserver(([entry]) => {
+      publish(
+        entry.borderBoxSize?.[0]?.blockSize ?? (entry.target as HTMLElement).offsetHeight,
+      );
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--player-bar-height");
+    };
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function PlayerBar() {
   const p = usePlayer();
   // `t` is the current time in this component, so the translator takes a name.
@@ -514,7 +568,7 @@ export function PlayerBar() {
   if (compact) {
     const timeWidth = timeLabelWidth(d);
     return (
-      <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+      <PlayerBarShell>
         <div className="flex flex-col gap-1 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {/* gap-2, not gap-3: three transport buttons plus volume leave the
               title barely over 100px on a 360px screen as it is. */}
@@ -543,12 +597,12 @@ export function PlayerBar() {
             </span>
           </div>
         </div>
-      </div>
+      </PlayerBarShell>
     );
   }
 
   return (
-    <div className="sticky bottom-0 z-50 border-t bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+    <PlayerBarShell>
       {seekbar}
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:gap-4 sm:px-6 sm:py-3 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {nowPlaying}
@@ -562,6 +616,6 @@ export function PlayerBar() {
 
         {volume}
       </div>
-    </div>
+    </PlayerBarShell>
   );
 }

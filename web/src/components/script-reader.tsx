@@ -173,6 +173,21 @@ export function ScriptReaderProvider({
     const onKey = (e: KeyboardEvent) => {
       const el = bodyRef.current;
       if (!el) return;
+
+      // The player bar stays live underneath, and its seek and volume sliders
+      // answer to the arrow keys too. Only claim a press that is not aimed at
+      // something else: focus resting on the page at large still scrolls the
+      // script, focus inside a control does not.
+      //
+      // The popup is found through the DOM rather than a ref because Base UI's
+      // Popup does not forward one, and a ref that stays null here would send
+      // every key down the early return — silently killing the keyboard.
+      const popup = el.closest('[role="dialog"]');
+      const target = e.target as Node | null;
+      const loose =
+        target === document.body || target === document.documentElement;
+      if (!loose && (!popup || !target || !popup.contains(target))) return;
+
       const page = vertical ? el.clientWidth * 0.9 : el.clientHeight * 0.9;
       if (e.key === "PageDown") {
         if (vertical) el.scrollLeft -= page;
@@ -189,22 +204,42 @@ export function ScriptReaderProvider({
       }
       e.preventDefault();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase: the dialog stops arrow keys from propagating — they never
+    // reach a bubble-phase listener on window, while PageUp/PageDown do. The
+    // containment check above is what keeps capturing from stealing the arrows
+    // the player's sliders want.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [openIndex, vertical]);
 
   return (
     <ReaderContext.Provider value={api}>
       {children}
+      {/*
+        Deliberately not modal. Following a 台本 while the track plays is the
+        whole point, so the player bar has to stay reachable: `modal={false}`
+        leaves the rest of the document interactive, and the popup stops above
+        the bar rather than covering it.
+
+        `disablePointerDismissal` goes with that. Without it, reaching for
+        pause or the seek bar — now that they are visible and clickable — would
+        register as an outside press and shut the reader. Escape and the close
+        button remain the ways out.
+      */}
       <Dialog
         open={openIndex !== null}
         onOpenChange={(o) => !o && setOpenIndex(null)}
+        modal={false}
+        disablePointerDismissal
       >
         <DialogPortal>
-          <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/80 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+          {/* No backdrop: it would either dim the player along with everything
+              else or have to be cut around it, and the popup below is opaque. */}
           {/* Composed here rather than from DialogContent, which is a small
-              padded card — the reader needs the whole viewport. */}
-          <DialogPrimitive.Popup className="fixed inset-0 z-50 flex flex-col bg-background duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+              padded card — the reader needs the whole viewport above the bar. */}
+          {/* No bottom border: the popup stops exactly where the player bar
+              starts, and the bar draws its own `border-t` there already. */}
+          <DialogPrimitive.Popup className="fixed inset-x-0 top-0 bottom-[var(--player-bar-height,0px)] z-50 flex flex-col bg-background duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
             <DialogPrimitive.Title className="sr-only">
               {current?.title ?? ""}
             </DialogPrimitive.Title>
