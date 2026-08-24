@@ -7,10 +7,14 @@ import {
   upsertWork,
   upsertTrack,
   pruneTracksNotIn,
+  upsertAsset,
+  pruneAssetsNotIn,
+  markAssetsScanned,
   getWorkById,
   getWorkMetadataCounts,
   getAllWorkScanSnapshots,
 } from "./db/repository";
+import { classifyAsset } from "./assets/classify";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache } from "./db/queries";
 import fsSync from "node:fs";
@@ -61,6 +65,7 @@ export type ScanEvent =
   | { type: "cover-saved"; workId: string }
   | { type: "meta-skipped"; workId: string }
   | { type: "tracks-done"; workId: string; tracks: number }
+  | { type: "assets-done"; workId: string; assets: number }
   | { type: "work-done"; workId: string; title?: string; hasCover: boolean }
   | { type: "error"; workId?: string; message: string }
   | { type: "durations-start"; total: number }
@@ -91,6 +96,8 @@ export interface ScanResult {
   worksNew: number;
   worksSkipped: number;
   tracksScanned: number;
+  /** Non-audio extras recorded: illustrations, おまけ videos, 台本. */
+  assetsScanned: number;
   metadataFetched: number;
   errors: string[];
   /** Set when DLsite went away and the run stopped early. */
@@ -200,6 +207,7 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     worksNew: 0,
     worksSkipped: 0,
     tracksScanned: 0,
+    assetsScanned: 0,
     metadataFetched: 0,
     errors: [],
   };
@@ -258,6 +266,10 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         if (snap.tagCount === 0) return;
         if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
         if (!snap.lastScannedAt) return;
+        // Indexed before extras existed. One re-walk backfills its assets and
+        // stamps the column, after which this guard stops firing. Costs a
+        // local directory walk — `needsMeta` stays false, so no network.
+        if (!snap.assetsScannedAt) return;
         // Packed <-> extracted is a change the mtime check can miss: an
         // archive's own mtime predates the scan that first recorded it.
         if (snap.isArchive !== entry.isArchive) return;
@@ -413,6 +425,11 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         // them would cascade away their likes and playback progress and strand
         // their bookmarks. They cost nothing while the work is packed, and are
         // still there — matched by relative path — once it is unpacked again.
+        //
+        // Stamped as asset-scanned all the same. There is nothing to index
+        // inside the container, and without this the quick-skip's
+        // never-scanned guard would re-walk every archived work on every run.
+        markAssetsScanned(workId);
         emit({
           type: "work-done",
           workId,
@@ -423,27 +440,53 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
       }
 
       const keptPaths: string[] = [];
+      const keptAssetPaths: string[] = [];
       let workTracks = 0;
+      let workAssetCount = 0;
       for await (const filePath of walk(workPath)) {
         const ext = path.extname(filePath).toLowerCase();
-        if (!AUDIO_EXTS.has(ext)) continue;
         const rel = path.relative(workPath, filePath);
         const stat = await fs.stat(filePath).catch(() => null);
-        const { title, trackNumber } = makeTrackTitle(path.basename(filePath));
-        upsertTrack({
+
+        if (AUDIO_EXTS.has(ext)) {
+          const { title, trackNumber } = makeTrackTitle(path.basename(filePath));
+          upsertTrack({
+            workId,
+            title,
+            relativePath: rel,
+            extension: ext,
+            sizeBytes: stat?.size ?? undefined,
+            trackNumber,
+          });
+          keptPaths.push(rel);
+          result.tracksScanned++;
+          workTracks++;
+          continue;
+        }
+
+        // Everything else gets one shot at being an extra. `classifyAsset`
+        // returns null for archives, OS junk and readmes; an empty file is
+        // dropped here because nothing can be shown for it.
+        const asset = classifyAsset(rel);
+        if (!asset || !stat?.size) continue;
+        upsertAsset({
           workId,
-          title,
+          kind: asset.kind,
+          title: asset.title,
           relativePath: rel,
-          extension: ext,
-          sizeBytes: stat?.size ?? undefined,
-          trackNumber,
+          extension: asset.extension,
+          sizeBytes: stat.size,
+          orderHint: asset.orderHint,
         });
-        keptPaths.push(rel);
-        result.tracksScanned++;
-        workTracks++;
+        keptAssetPaths.push(rel);
+        result.assetsScanned++;
+        workAssetCount++;
       }
       pruneTracksNotIn(workId, keptPaths);
+      pruneAssetsNotIn(workId, keptAssetPaths);
+      markAssetsScanned(workId);
       emit({ type: "tracks-done", workId, tracks: workTracks });
+      emit({ type: "assets-done", workId, assets: workAssetCount });
 
       const resolvedTitle =
         metadata?.title ?? existing?.title ?? undefined;

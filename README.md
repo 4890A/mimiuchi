@@ -20,6 +20,14 @@ A personal audio library web app for browsing and playing locally-stored audio w
 - Reveal a work's folder in your file manager
 - Blur R18 covers with one click, and a light/dark theme toggle
 
+**Extras**
+
+- Picks up the non-audio files that ship with a work — bonus illustrations, おまけ videos, and 台本 (scripts) — and puts them in a collapsed panel on the work page, so they never crowd out the tracks
+- Scripts are told apart from readmes, which are always ignored; a 台本 is recognised even when only the folder it sits in says so
+- Reads a `.txt` 台本 in the app as continuous vertical Japanese, with a horizontal toggle and adjustable text size. PDF scripts open in a new tab
+- When a work ships one 台本 per track, each track row gets its own link to it
+- Illustrations open in a gallery; videos play in place, seekable however large they are
+
 **Playback**
 
 - Persistent player bar that keeps playing as you navigate
@@ -64,6 +72,7 @@ Edit `web/.env.local` and set the variables below.
 | `KIKOERU_DATA_DIR` | no | Where the SQLite database lives (defaults to `../data` relative to `web/`) |
 | `KIKOERU_COVERS_DIR` | no | Where cover art is cached (defaults to `<project-root>/covers`) |
 | `KIKOERU_FFMPEG_PATH` | no | Path to the `ffmpeg` binary if it isn't on your `PATH` |
+| `KIKOERU_THUMBNAIL_CACHE_MB` | no | Ceiling for the gallery thumbnail cache in `<KIKOERU_DATA_DIR>/thumbnails` (default 512, `0` for no limit) |
 
 ## Running
 
@@ -116,6 +125,11 @@ migration step. (Existing databases from before automatic migrations are
 detected and left untouched.)
 
 On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from the in-app **Scan** button — it walks your library root, fetches metadata, and streams progress to a panel in the bottom-right. Re-run whenever you add new works.
+
+> Upgrading from a version without the extras panel? The first scan after the
+> upgrade re-walks every work once to index its non-audio files, then goes back
+> to skipping unchanged ones. It reads local directories only — no extra
+> metadata is fetched — so it costs a little disk time and nothing else.
 
 > A `pnpm scan` CLI script also exists (`web/scripts/scan.ts`) if you'd rather run the scan headlessly.
 

@@ -167,4 +167,33 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* 台本 reader. Vertical Japanese flows top-to-bottom in columns that fill
+     the height and advance leftwards, so the *horizontal* axis is the one
+     that scrolls — which is why the reader translates wheel movement onto it.
+     `--font-jp` (Noto Sans JP) is declared in layout.tsx but never wired into
+     @theme, so there is no font-jp utility to use here. */
+  .script-vertical {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    /* Two-digit numbers read upright inside vertical text rather than lying
+       on their side one digit at a time. */
+    text-combine-upright: digits 2;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .script-horizontal {
+    writing-mode: horizontal-tb;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .script-body {
+    font-family: var(--font-jp), var(--font-geist-sans), sans-serif;
+    white-space: pre-wrap;
+    /* Japanese sets loosely; this is roughly what a paperback uses. */
+    line-height: 2;
+    letter-spacing: 0.02em;
+  }
 }

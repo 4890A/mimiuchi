@@ -7,9 +7,11 @@ import {
   Folder,
   Play,
   Pause,
+  ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
+import { useScriptReader } from "@/components/script-reader";
 import { usePlayer, type QueueTrack } from "@/components/player/player-store";
 import {
   ensureBookmarksLoaded,
@@ -81,16 +83,20 @@ export function TrackList({
   workId,
   workTitle,
   coverSrc,
+  scriptByTrackId,
 }: {
   tracks: TrackWithProgress[];
   workId: string;
   workTitle: string;
   coverSrc: string;
+  /** track id → 台本 asset id, for works with a script per track. */
+  scriptByTrackId?: Map<number, number>;
 }) {
   const p = usePlayer();
   // Rows bind `t` to a track below, so the translator takes a name.
   const { t: translate } = useTranslations();
   const bookmarkMap = useBookmarkMap();
+  const reader = useScriptReader();
 
   const trackIds = useMemo(() => tracks.map((t) => t.id), [tracks]);
   useEffect(() => {
@@ -158,6 +164,9 @@ export function TrackList({
   function renderTrack(t: TrackWithProgress, queueIndex: number, displayNumber: number) {
     const isCurrent = p.current?.id === t.id;
     const playingThis = isCurrent && p.isPlaying;
+    // Only set for works that ship one 台本 per track, and only where the
+    // numbering pairs up unambiguously — so most rows show nothing here.
+    const scriptId = scriptByTrackId?.get(t.id);
 
     // Live for the playing track, last-known for anything played this session,
     // page-load snapshot otherwise.
@@ -238,6 +247,18 @@ export function TrackList({
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {formatDuration(t.durationSeconds)}
         </span>
+        {scriptId !== undefined && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            onClick={() => reader?.openScript(scriptId)}
+            aria-label={translate("work.scriptFor")}
+            title={translate("work.scriptFor")}
+          >
+            <ScrollText className="h-4 w-4" />
+          </Button>
+        )}
         <LikeButton trackId={t.id} initialLiked={t.liked} />
       </li>
     );

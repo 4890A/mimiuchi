@@ -10,6 +10,7 @@ import {
   workTags,
   tracks,
   trackWaveforms,
+  workAssets,
   type NewWork,
   type NewTrack,
 } from "./schema";
@@ -195,6 +196,73 @@ export function upsertTrack(input: UpsertTrackInput): void {
     .run();
 }
 
+export interface UpsertAssetInput {
+  workId: string;
+  kind: string;
+  title: string;
+  relativePath: string;
+  extension: string;
+  sizeBytes?: number;
+  orderHint?: number | null;
+}
+
+export function upsertAsset(input: UpsertAssetInput): void {
+  db.insert(workAssets)
+    .values({ ...input, orderHint: input.orderHint ?? null })
+    .onConflictDoUpdate({
+      target: [workAssets.workId, workAssets.relativePath],
+      set: {
+        kind: input.kind,
+        title: input.title,
+        extension: input.extension,
+        sizeBytes: input.sizeBytes,
+        orderHint: input.orderHint ?? null,
+      },
+    })
+    .run();
+}
+
+export function pruneAssetsNotIn(
+  workId: string,
+  keptRelativePaths: string[],
+): void {
+  const existing = db
+    .select({ id: workAssets.id, relativePath: workAssets.relativePath })
+    .from(workAssets)
+    .where(eq(workAssets.workId, workId))
+    .all();
+  const keep = new Set(keptRelativePaths);
+  const toDelete = existing
+    .filter((a) => !keep.has(a.relativePath))
+    .map((a) => a.id);
+  if (toDelete.length > 0) {
+    db.delete(workAssets).where(inArray(workAssets.id, toDelete)).run();
+  }
+}
+
+/** Stamps the work as asset-scanned so the quick-skip stops re-walking it. */
+export function markAssetsScanned(workId: string): void {
+  db.update(works)
+    .set({ assetsScannedAt: new Date() })
+    .where(eq(works.id, workId))
+    .run();
+}
+
+export function getAssetSourceFile(
+  id: number,
+): { folderPath: string; relativePath: string; extension: string } | undefined {
+  return db
+    .select({
+      folderPath: works.folderPath,
+      relativePath: workAssets.relativePath,
+      extension: workAssets.extension,
+    })
+    .from(workAssets)
+    .innerJoin(works, eq(works.id, workAssets.workId))
+    .where(eq(workAssets.id, id))
+    .get();
+}
+
 export function listTracksMissingDuration(): Array<{
   id: number;
   workId: string;
@@ -327,6 +395,8 @@ export interface WorkScanSnapshot {
   coverPath: string | null;
   tagCount: number;
   isArchive: boolean;
+  /** NULL on works indexed before assets existed — forces one re-walk. */
+  assetsScannedAt: Date | null;
 }
 
 /** Bulk-load the per-work fields the scanner needs to decide whether a work
@@ -340,6 +410,7 @@ export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
       lastScannedAt: works.lastScannedAt,
       coverPath: works.coverPath,
       isArchive: works.isArchive,
+      assetsScannedAt: works.assetsScannedAt,
       tagCount: sql<number>`(SELECT COUNT(*) FROM work_tags WHERE work_tags.work_id = ${works.id})`.as("tag_count"),
     })
     .from(works)
@@ -353,6 +424,7 @@ export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
       coverPath: r.coverPath,
       tagCount: r.tagCount,
       isArchive: r.isArchive,
+      assetsScannedAt: r.assetsScannedAt,
     });
   }
   return out;

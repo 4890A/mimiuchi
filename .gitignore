@@ -31,6 +31,8 @@ data/*.sqlite
 data/*.sqlite-*
 # Derived audio, rebuilt on demand — see lib/transcode.
 data/transcodes/
+# Downscaled extra illustrations, rebuilt on demand — see lib/assets/thumbnail.
+data/thumbnails/
 covers/
 
 # playwright artifacts

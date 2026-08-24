@@ -22,6 +22,13 @@
       "when": 1787078578466,
       "tag": "0002_clammy_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787598573258,
+      "tag": "0003_groovy_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

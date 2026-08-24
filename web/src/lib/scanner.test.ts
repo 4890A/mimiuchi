@@ -127,6 +127,25 @@ function trackPaths(id: string): string[] {
   ).map((r) => r.relative_path);
 }
 
+interface AssetRow {
+  relative_path: string;
+  kind: string;
+  order_hint: number | null;
+}
+
+function assetRows(id: string): AssetRow[] {
+  return sqlite
+    .prepare(
+      `SELECT relative_path, kind, order_hint FROM work_assets
+       WHERE work_id = ? ORDER BY relative_path`,
+    )
+    .all(id) as AssetRow[];
+}
+
+function kindOfAsset(rows: AssetRow[], relativePath: string): string | undefined {
+  return rows.find((r) => r.relative_path === relativePath)?.kind;
+}
+
 // ---------------------------------------------------------------------------
 // The happy path
 // ---------------------------------------------------------------------------
@@ -203,6 +222,7 @@ test("emits a coherent event stream", async () => {
     "fetch-cover",
     "cover-saved",
     "tracks-done",
+    "assets-done",
     "work-done",
     "done",
   ]);
@@ -247,7 +267,7 @@ test("ignores folders with no work id in the name", async () => {
   assert.equal(result.tracksScanned, 0);
 });
 
-test("indexes only audio files", async () => {
+test("indexes only audio files as tracks", async () => {
   makeWork(WORK_ID, [
     "01 Intro.mp3",
     "02 Main.flac",
@@ -267,6 +287,95 @@ test("indexes only audio files", async () => {
     "03 Extra.m4a",
     "04 Loop.opus",
   ]);
+});
+
+test("records non-audio files as assets, and never the readme", async () => {
+  makeWork(WORK_ID, [
+    "01 Intro.mp3",
+    "cover.jpg",
+    "readme.txt",
+    "notes.pdf",
+    path.join("おまけ", "台本.txt"),
+    path.join("おまけ", "trailer.mp4"),
+  ]);
+  stubDlsite();
+
+  const result = await scan().run;
+  assert.equal(result.tracksScanned, 1, "audio is still a track, not an asset");
+
+  const rows = assetRows(WORK_ID);
+  assert.deepEqual(
+    rows.map((r) => r.relative_path).sort(),
+    [
+      "cover.jpg",
+      "notes.pdf",
+      path.join("おまけ", "trailer.mp4"),
+      path.join("おまけ", "台本.txt"),
+    ].sort(),
+    "readme.txt must not appear",
+  );
+  assert.equal(kindOfAsset(rows, path.join("おまけ", "台本.txt")), "script");
+  assert.equal(kindOfAsset(rows, "cover.jpg"), "image");
+  assert.equal(kindOfAsset(rows, path.join("おまけ", "trailer.mp4")), "video");
+  // A PDF with no script token in its name or folder is not a 台本.
+  assert.equal(kindOfAsset(rows, "notes.pdf"), "other");
+});
+
+test("detects a 台本 whose name says so only via its folder", async () => {
+  makeWork(WORK_ID, [
+    "01 Intro.mp3",
+    path.join("台本", "1　バイノーラル指示あり.txt"),
+    path.join("台本", "ex　バイノーラル指示あり.txt"),
+  ]);
+  stubDlsite();
+
+  await scan().run;
+  const rows = assetRows(WORK_ID);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => r.kind === "script"));
+  // The order hint is what pairs a script with its track.
+  const numbered = rows.find((r) => r.relative_path.includes("1　"));
+  assert.equal(numbered?.order_hint, 1);
+  const unnumbered = rows.find((r) => r.relative_path.includes("ex　"));
+  assert.equal(unnumbered?.order_hint, null);
+});
+
+test("drops asset rows for files that disappeared", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3", "art.jpg", "extra.jpg"]);
+  stubDlsite();
+  await scan().run;
+  assert.equal(assetRows(WORK_ID).length, 2);
+
+  fs.rmSync(path.join(libraryRoot, WORK_ID, "extra.jpg"));
+  stubDlsite();
+  await scan({ forceMetadata: true }).run;
+  assert.deepEqual(
+    assetRows(WORK_ID).map((r) => r.relative_path),
+    ["art.jpg"],
+  );
+});
+
+test("a work indexed before assets existed is re-walked once", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3", "art.jpg"]);
+  stubDlsite();
+  await scan().run;
+
+  // Simulate a database from before this feature: assets gone, column NULL.
+  sqlite.prepare("DELETE FROM work_assets").run();
+  sqlite.prepare("UPDATE works SET assets_scanned_at = NULL").run();
+
+  // A plain incremental scan — no force, no filter — must still pick it up,
+  // because otherwise the folder mtime check would skip the work forever.
+  const result = await scan().run;
+  assert.equal(result.worksSkipped, 0);
+  assert.deepEqual(
+    assetRows(WORK_ID).map((r) => r.relative_path),
+    ["art.jpg"],
+  );
+
+  // And now that it is stamped, the next scan skips it again.
+  const again = await scan().run;
+  assert.equal(again.worksSkipped, 1);
 });
 
 test("walks subdirectories inside a work and keeps relative paths", async () => {

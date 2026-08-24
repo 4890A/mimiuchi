@@ -38,6 +38,7 @@ export const BACKUP_TABLES = [
   "work_voice_actors",
   "work_tags",
   "tracks",
+  "work_assets",
   "likes",
   "track_progress",
   "settings",

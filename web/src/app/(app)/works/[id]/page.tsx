@@ -18,6 +18,9 @@ import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
 import { EditWorkDialog } from "@/components/edit-work-dialog";
+import { WorkExtras } from "@/components/work-extras";
+import { ScriptReaderProvider } from "@/components/script-reader";
+import { linkScriptsToTracks } from "@/lib/assets/link-scripts";
 import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +43,18 @@ export default async function WorkPage({
       hasLocalCover: Boolean(work.coverPath),
     },
     work.coverVersion,
+  );
+
+  // Scripts the in-app reader can render, in the order getWorkDetail returned
+  // them (numbered ones first, unnumbered after). PDFs are excluded — they
+  // open in a new tab instead.
+  const readableScripts = work.assets
+    .filter((a) => a.kind === "script" && a.extension.toLowerCase() === ".txt")
+    .map((a) => ({ id: a.id, title: a.title }));
+
+  const scriptByTrackId = linkScriptsToTracks(
+    work.assets.filter((a) => a.kind === "script"),
+    work.tracks,
   );
 
   return (
@@ -191,26 +206,35 @@ export default async function WorkPage({
           </div>
         </div>
 
-        <section className="mt-8">
-          <h2 className="mb-3 text-lg font-semibold">
-            {t("work.tracks")}
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {work.tracks.length}
-            </span>
-          </h2>
-          {work.tracks.length === 0 ? (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-              {work.isArchive ? t("work.noTracksArchived") : t("work.noTracks")}
-            </div>
-          ) : (
-            <TrackList
-              tracks={work.tracks}
-              workId={work.id}
-              workTitle={work.title}
-              coverSrc={cover}
-            />
-          )}
-        </section>
+        {/* Wraps both sections so a track row's script icon and an extras row
+            drive the same single reader instance. */}
+        <ScriptReaderProvider scripts={readableScripts}>
+          <section className="mt-8">
+            <h2 className="mb-3 text-lg font-semibold">
+              {t("work.tracks")}
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {work.tracks.length}
+              </span>
+            </h2>
+            {work.tracks.length === 0 ? (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+                {work.isArchive
+                  ? t("work.noTracksArchived")
+                  : t("work.noTracks")}
+              </div>
+            ) : (
+              <TrackList
+                tracks={work.tracks}
+                workId={work.id}
+                workTitle={work.title}
+                coverSrc={cover}
+                scriptByTrackId={scriptByTrackId}
+              />
+            )}
+          </section>
+
+          <WorkExtras assets={work.assets} nsfw={work.nsfw} />
+        </ScriptReaderProvider>
       </div>
     </div>
   );

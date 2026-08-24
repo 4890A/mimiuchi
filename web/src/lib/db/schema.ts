@@ -63,6 +63,10 @@ export const works = sqliteTable(
       .default(false),
     metadataSource: text("metadata_source"),
     lastScannedAt: integer("last_scanned_at", { mode: "timestamp_ms" }),
+    /** When the work's non-audio files were last indexed into `work_assets`.
+     *  NULL on every row that predates asset scanning, which is what makes the
+     *  scanner walk each existing work exactly once to backfill it. */
+    assetsScannedAt: integer("assets_scanned_at", { mode: "timestamp_ms" }),
     lastMetadataSyncAt: integer("last_metadata_sync_at", {
       mode: "timestamp_ms",
     }),
@@ -130,6 +134,39 @@ export const tracks = sqliteTable(
   ],
 );
 
+/**
+ * A non-audio file that ships alongside a work: an illustration, an おまけ
+ * video, a 台本 (script). Readmes are filtered out at scan time and never
+ * reach this table — see `lib/assets/classify.ts`.
+ *
+ * Deliberately separate from `tracks`. Non-audio rows in `tracks` would be fed
+ * to `music-metadata` by the duration pass, served by the audio route's MIME
+ * map, and referenced by the `likes` / `track_progress` / `track_waveforms`
+ * foreign keys — none of which make sense for a PDF.
+ */
+export const workAssets = sqliteTable(
+  "work_assets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workId: text("work_id")
+      .notNull()
+      .references(() => works.id, { onDelete: "cascade" }),
+    /** One of AssetKind: script | image | video | text | other. */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    relativePath: text("relative_path").notNull(),
+    extension: text("extension").notNull(),
+    sizeBytes: integer("size_bytes"),
+    /** First run of digits in the filename. Orders per-track 台本 and is what
+     *  links them to their track — see `lib/assets/link-scripts.ts`. */
+    orderHint: integer("order_hint"),
+  },
+  (t) => [
+    index("work_assets_work_idx").on(t.workId),
+    uniqueIndex("work_assets_path_idx").on(t.workId, t.relativePath),
+  ],
+);
+
 export const likes = sqliteTable("likes", {
   trackId: integer("track_id")
     .primaryKey()
@@ -178,6 +215,8 @@ export type Work = typeof works.$inferSelect;
 export type NewWork = typeof works.$inferInsert;
 export type Track = typeof tracks.$inferSelect;
 export type NewTrack = typeof tracks.$inferInsert;
+export type WorkAsset = typeof workAssets.$inferSelect;
+export type NewWorkAsset = typeof workAssets.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type VoiceActor = typeof voiceActors.$inferSelect;
 export type Circle = typeof circles.$inferSelect;

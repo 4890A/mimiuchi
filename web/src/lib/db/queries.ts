@@ -14,6 +14,7 @@ import {
   tracks,
   likes,
   trackProgress,
+  workAssets,
 } from "./schema";
 
 export interface WorkSummary {
@@ -257,6 +258,15 @@ export function getWorkDetail(workId: string) {
     .where(eq(workTags.workId, workId))
     .all();
 
+  // Non-audio extras. Ordered so per-track 台本 come out 0,1,2… and anything
+  // unnumbered (`ex　…`, `※台本について`) settles after them.
+  const assetRows = db
+    .select()
+    .from(workAssets)
+    .where(eq(workAssets.workId, workId))
+    .orderBy(asc(workAssets.orderHint), asc(workAssets.relativePath))
+    .all();
+
   // mtime of the local cover file, used as a cache-busting token so the
   // browser refetches /api/cover after an in-app cover replacement despite
   // the route's immutable Cache-Control.
@@ -279,6 +289,7 @@ export function getWorkDetail(workId: string) {
       liked: liked.has(t.id),
       progress: progress.get(t.id) ?? null,
     })),
+    assets: assetRows,
   };
 }
 
