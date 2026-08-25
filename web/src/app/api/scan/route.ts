@@ -17,6 +17,10 @@ export async function POST(req: Request) {
   let filterIds: ReadonlySet<string> | undefined;
   let forceMetadata = force;
   const missingSeiyuu = mode === "missing-seiyuu";
+  // Re-reads every work's files without touching DLsite. The middle ground
+  // between an incremental scan, which cannot see a file added inside a
+  // subfolder, and a force rescan, which re-fetches every listing to find it.
+  const extrasOnly = mode === "extras";
   if (missingSeiyuu) {
     filterIds = new Set(listWorkIdsMissingSeiyuu());
     forceMetadata = true;
@@ -34,6 +38,7 @@ export async function POST(req: Request) {
           libraryRoots,
           coversDir,
           forceMetadata,
+          skipMetadata: extrasOnly,
           filterIds,
           onEvent: (ev) => {
             // A scan cut short by a DLsite outage added no tracks worth

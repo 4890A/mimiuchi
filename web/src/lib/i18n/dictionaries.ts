@@ -314,6 +314,8 @@ export const en = {
   "settings.scans.incrementalHint": "New works and missing covers/metadata only",
   "settings.scans.force": "Force full rescan",
   "settings.scans.forceHint": "Re-fetch all metadata and covers",
+  "settings.scans.extras": "Re-scan extras only",
+  "settings.scans.extrasHint": "Re-reads every work's files to pick up illustrations, videos and 台本 — including ones added inside an おまけ folder, which an incremental scan cannot see. Never contacts DLsite.",
   "settings.scans.missingSeiyuu": "Re-scan works missing seiyuu",
   "settings.scans.missingSeiyuuNone": "No works missing seiyuu",
   "settings.scans.missingSeiyuuHint": "{count} works have no voice actors",
@@ -372,6 +374,7 @@ export const en = {
 
   "scan.start.scan": "Starting scan…",
   "scan.start.force": "Starting full rescan…",
+  "scan.start.extras": "Re-scanning extras…",
   "scan.start.missingSeiyuu": "Re-scanning works missing seiyuu…",
   "scan.start.durationsMissing": "Reading missing track durations…",
   "scan.start.durationsAll": "Reading durations for all tracks…",
@@ -728,6 +731,8 @@ export const ja: Record<TranslationKey, string> = {
   "settings.scans.incrementalHint": "新しい作品と未取得のカバー・メタデータのみ",
   "settings.scans.force": "完全に再スキャン",
   "settings.scans.forceHint": "メタデータとカバーをすべて再取得",
+  "settings.scans.extras": "おまけのみ再スキャン",
+  "settings.scans.extrasHint": "各作品のファイルを読み直し、イラスト・動画・台本を取り込みます。おまけフォルダー内に追加したファイルも対象です（通常のスキャンでは検出できません）。DLsiteには接続しません。",
   "settings.scans.missingSeiyuu": "声優が未設定の作品を再スキャン",
   "settings.scans.missingSeiyuuNone": "声優が未設定の作品はありません",
   "settings.scans.missingSeiyuuHint": "{count}件の作品に声優が設定されていません",
@@ -786,6 +791,7 @@ export const ja: Record<TranslationKey, string> = {
 
   "scan.start.scan": "スキャンを開始しています…",
   "scan.start.force": "完全な再スキャンを開始しています…",
+  "scan.start.extras": "おまけを再スキャンしています…",
   "scan.start.missingSeiyuu": "声優が未設定の作品を再スキャンしています…",
   "scan.start.durationsMissing": "未取得の再生時間を読み取っています…",
   "scan.start.durationsAll": "すべてのトラックの再生時間を読み取っています…",

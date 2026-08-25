@@ -47,7 +47,7 @@ function initialState(t: TFunction): ScanProgressState {
 }
 
 export type ScanMode =
-  | { kind: "library"; force?: boolean; missingSeiyuu?: boolean }
+  | { kind: "library"; force?: boolean; missingSeiyuu?: boolean; extras?: boolean }
   | { kind: "durations"; all?: boolean };
 
 export interface ScanProgressHandle {
@@ -334,6 +334,9 @@ export function useScanProgress(): {
       startMsg = mode.all
         ? t("scan.start.durationsAll")
         : t("scan.start.durationsMissing");
+    } else if (mode.extras) {
+      url = "/api/scan?mode=extras";
+      startMsg = t("scan.start.extras");
     } else if (mode.missingSeiyuu) {
       url = "/api/scan?mode=missing-seiyuu";
       startMsg = t("scan.start.missingSeiyuu");

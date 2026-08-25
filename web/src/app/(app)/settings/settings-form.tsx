@@ -13,6 +13,7 @@ import {
   XCircle,
   Mic2,
   PlugZap,
+  ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,6 +304,13 @@ export function SettingsForm({
             icon={<RotateCw className="h-4 w-4" />}
             disabled={scan.busy}
             onClick={() => scan.start({ kind: "library", force: true })}
+          />
+          <ScanRow
+            labelKey="settings.scans.extras"
+            hint={t("settings.scans.extrasHint")}
+            icon={<ScrollText className="h-4 w-4" />}
+            disabled={scan.busy}
+            onClick={() => scan.start({ kind: "library", extras: true })}
           />
           <ScanRow
             labelKey="settings.scans.missingSeiyuu"

@@ -40,7 +40,8 @@ A personal audio library web app for browsing and playing locally-stored audio w
 
 **Setup & admin**
 
-- Trigger a library scan from inside the app with live progress
+- Trigger a library scan from inside the app with live progress, including an
+  extras-only pass that re-reads files without contacting DLsite
 - Single shared password login
 - Configure library roots, cover directory, and an optional outbound proxy from the settings page
 
@@ -126,10 +127,18 @@ detected and left untouched.)
 
 On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from the in-app **Scan** button — it walks your library root, fetches metadata, and streams progress to a panel in the bottom-right. Re-run whenever you add new works.
 
-> Upgrading from a version without the extras panel? The first scan after the
-> upgrade re-walks every work once to index its non-audio files, then goes back
-> to skipping unchanged ones. It reads local directories only — no extra
-> metadata is fetched — so it costs a little disk time and nothing else.
+> Upgrading from a version without the extras panel? Just scan once. The first
+> scan after the upgrade re-walks every work to index its non-audio files, then
+> goes back to skipping unchanged ones. It reads local directories only — no
+> metadata is fetched — so it costs seconds and nothing else.
+
+Later on, if you drop new files into a work you have already scanned, use
+**Re-scan extras only** in Settings. An ordinary scan skips a work whose folder
+hasn't changed, and that check looks at the work folder itself — which adding
+`おまけ/台本.txt` does not touch, since only the immediate parent directory's
+timestamp changes. The extras scan re-reads every work's files and never
+contacts DLsite, so it is the cheap way to pick those up; a full force rescan
+would find them too, but only by re-fetching every listing.
 
 > A `pnpm scan` CLI script also exists (`web/scripts/scan.ts`) if you'd rather run the scan headlessly.
 

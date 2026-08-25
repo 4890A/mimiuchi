@@ -84,6 +84,17 @@ export interface ScanOptions {
   libraryRoots: string[];
   coversDir: string;
   forceMetadata?: boolean;
+  /**
+   * Walk every work's files, and never ask DLsite for anything.
+   *
+   * The counterpart to `forceMetadata`, for re-reading what is on disk. An
+   * ordinary scan skips a work whose folder mtime has not moved, and that
+   * check stats the work folder itself — which a new file dropped into
+   * `おまけ/` or `台本/` does not touch, since only the immediate parent
+   * directory's mtime changes. Those extras would otherwise stay invisible
+   * until something forced a full rescan and re-fetched every listing.
+   */
+  skipMetadata?: boolean;
   /** If set, only scan works whose id is in this list. */
   filterIds?: ReadonlySet<string>;
   /** Backoff timings. Production uses the defaults; tests shrink them to 0. */
@@ -249,8 +260,10 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   // drop works that are already fully indexed and whose folder mtime hasn't
   // advanced past lastScannedAt. Saves N sqlite lookups + the track walk per
   // up-to-date work. Bypassed when forceMetadata=true.
+  // `skipMetadata` opts out too: re-reading the files is the entire point of
+  // that mode, and the mtime check is exactly what hides a changed subfolder.
   const snapshots =
-    !opts.forceMetadata && !opts.filterIds
+    !opts.forceMetadata && !opts.filterIds && !opts.skipMetadata
       ? getAllWorkScanSnapshots()
       : null;
   if (snapshots) {
@@ -303,14 +316,15 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         !existing?.coverPath || !fsSync.existsSync(existing.coverPath);
       const tagsMissing = counts.tagCount === 0;
       const needsMeta =
-        opts.forceMetadata ||
+        !opts.skipMetadata &&
+        (opts.forceMetadata ||
         !existing?.metadataSource ||
         // HVDB is gone as a source; anything it wrote is stale by definition,
         // so an ordinary incremental scan replaces it with DLsite's version.
         existing.metadataSource === "hvdb" ||
         !existing?.lastMetadataSyncAt ||
         coverMissing ||
-        tagsMissing;
+        tagsMissing);
 
       emit({
         type: "work-start",

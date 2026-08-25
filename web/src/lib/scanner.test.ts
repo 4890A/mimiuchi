@@ -355,6 +355,50 @@ test("drops asset rows for files that disappeared", async () => {
   );
 });
 
+test("an extras scan finds a file added inside a subfolder", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3", path.join("おまけ", "art.jpg")]);
+  stubDlsite();
+  await scan().run;
+  assert.equal(assetRows(WORK_ID).length, 1);
+
+  // Dropping a file into an existing subfolder leaves the *work* folder's
+  // mtime untouched — only the subfolder's changes — so the quick-skip sees
+  // nothing to do and an ordinary scan misses it entirely.
+  fs.writeFileSync(
+    path.join(libraryRoot, WORK_ID, "おまけ", "台本.txt"),
+    Buffer.alloc(64, 1),
+  );
+  const incremental = await scan().run;
+  assert.equal(incremental.worksSkipped, 1, "the mtime check skips the work");
+  assert.equal(assetRows(WORK_ID).length, 1, "so the new 台本 stays unseen");
+
+  // The extras scan is the way to reach it. No interceptors are queued, so a
+  // DLsite call here would fail the test — proving it stays off the network.
+  const extras = await scan({ skipMetadata: true }).run;
+  assert.equal(extras.worksSkipped, 0);
+  assert.equal(extras.metadataFetched, 0);
+  assert.deepEqual(
+    assetRows(WORK_ID).map((r) => r.relative_path).sort(),
+    [path.join("おまけ", "art.jpg"), path.join("おまけ", "台本.txt")].sort(),
+  );
+});
+
+test("an extras scan leaves existing metadata alone", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3", "art.jpg"]);
+  stubDlsite();
+  await scan().run;
+  const before = workRow(WORK_ID)!;
+  assert.ok(before.title && before.title !== WORK_ID, "metadata was fetched");
+
+  const result = await scan({ skipMetadata: true }).run;
+  assert.equal(result.metadataFetched, 0);
+
+  const after = workRow(WORK_ID)!;
+  assert.equal(after.title, before.title);
+  assert.equal(after.cover_path, before.cover_path);
+  assert.equal(after.metadata_source, before.metadata_source);
+});
+
 test("a work indexed before assets existed is re-walked once", async () => {
   makeWork(WORK_ID, ["01 Intro.mp3", "art.jpg"]);
   stubDlsite();
