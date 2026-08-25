@@ -1,6 +1,6 @@
 import { getSettings } from "@/lib/settings";
 import { resolveLibraryRoots, resolveCoversDir } from "@/lib/config";
-import { listWorkIdsMissingSeiyuu } from "@/lib/db/repository";
+import { listWorkIdsMissingSeiyuu, listMissingWorks } from "@/lib/db/repository";
 import { SettingsForm } from "./settings-form";
 import { BackupRestore } from "@/components/backup-restore";
 import { getTranslations } from "@/lib/i18n/server";
@@ -15,6 +15,10 @@ export default async function SettingsPage() {
     coversDir: resolveCoversDir(settings.coversDir),
   };
   const missingSeiyuuCount = listWorkIdsMissingSeiyuu().length;
+  const missingWorks = listMissingWorks().map((w) => ({
+    id: w.id,
+    title: w.title,
+  }));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -25,6 +29,7 @@ export default async function SettingsPage() {
         initial={settings}
         effective={effective}
         missingSeiyuuCount={missingSeiyuuCount}
+        missingWorks={missingWorks}
       />
       <div className="mt-8">
         <BackupRestore />

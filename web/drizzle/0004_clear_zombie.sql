@@ -1,0 +1,1 @@
+ALTER TABLE `works` ADD `missing_since` integer;

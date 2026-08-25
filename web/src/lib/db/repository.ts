@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "./client";
 import {
   circles,
@@ -238,6 +238,59 @@ export function pruneAssetsNotIn(
   if (toDelete.length > 0) {
     db.delete(workAssets).where(inArray(workAssets.id, toDelete)).run();
   }
+}
+
+/**
+ * Flags works whose folder a scan could not find, leaving every other column
+ * alone. Rows already flagged keep their original timestamp, so the value
+ * records when the folder first went missing rather than the last scan.
+ */
+export function markWorksMissing(ids: string[], at: Date): void {
+  if (ids.length === 0) return;
+  db.update(works)
+    .set({ missingSince: at })
+    .where(and(inArray(works.id, ids), isNull(works.missingSince)))
+    .run();
+}
+
+/** Clears the flag on works that turned up again — a re-plugged drive heals. */
+export function clearWorksMissing(ids: string[]): void {
+  if (ids.length === 0) return;
+  db.update(works)
+    .set({ missingSince: null })
+    .where(and(inArray(works.id, ids), isNotNull(works.missingSince)))
+    .run();
+}
+
+/** Every work id with whether it is currently flagged missing. Cheap enough to
+ *  pull whole — the scanner needs the full set to diff against the disk. */
+export function listWorkIdsAndMissing(): Array<{ id: string; missing: boolean }> {
+  return db
+    .select({ id: works.id, missingSince: works.missingSince })
+    .from(works)
+    .all()
+    .map((r) => ({ id: r.id, missing: r.missingSince !== null }));
+}
+
+export interface MissingWork {
+  id: string;
+  title: string;
+  folderPath: string;
+  missingSince: Date | null;
+}
+
+export function listMissingWorks(): MissingWork[] {
+  return db
+    .select({
+      id: works.id,
+      title: works.title,
+      folderPath: works.folderPath,
+      missingSince: works.missingSince,
+    })
+    .from(works)
+    .where(isNotNull(works.missingSince))
+    .orderBy(asc(works.title))
+    .all();
 }
 
 /** Stamps the work as asset-scanned so the quick-skip stops re-walking it. */

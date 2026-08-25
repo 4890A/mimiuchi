@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,10 +14,12 @@ import {
   workTags,
   workVoiceActors,
   works,
+  tracks,
 } from "./db/schema";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache, listRandomWorks, type RecentWork } from "./db/queries";
-import { upsertWork } from "./db/repository";
+import { upsertWork, listMissingWorks } from "./db/repository";
+import { deleteBookmarksForTracks } from "./bookmarks";
 import { fetchMetadata, downloadCover, DlsiteUnavailableError } from "./metadata";
 import { getSettings } from "./settings";
 import { resolveCoversDir } from "./config";
@@ -394,6 +396,57 @@ export async function deleteWork(
   revalidatePath("/");
   revalidatePath("/liked");
   return { ok: true };
+}
+
+/**
+ * Removes the works a scan flagged as missing from disk.
+ *
+ * Only ever touches database rows and the cached cover art that was derived
+ * from them — never the library itself. A work reaches this list solely by
+ * having had its folder verifiably absent while its library root was readable,
+ * and the user has to ask for it explicitly.
+ */
+export async function removeMissingWorks(): Promise<
+  { ok: true; removed: number } | { ok: false; error: string }
+> {
+  const missing = listMissingWorks();
+  if (missing.length === 0) return { ok: true, removed: 0 };
+  const ids = missing.map((w) => w.id);
+
+  // Collected before the delete, since the rows are the only record of which
+  // bookmark keys to clear — those are not reachable by foreign key.
+  const trackIds = db
+    .select({ id: tracks.id })
+    .from(tracks)
+    .where(inArray(tracks.workId, ids))
+    .all()
+    .map((r) => r.id);
+
+  const covers = db
+    .select({ coverPath: works.coverPath })
+    .from(works)
+    .where(inArray(works.id, ids))
+    .all()
+    .map((r) => r.coverPath)
+    .filter((p): p is string => Boolean(p));
+
+  db.delete(works).where(inArray(works.id, ids)).run();
+  deleteBookmarksForTracks(trackIds);
+
+  for (const cover of covers) {
+    try {
+      fs.rmSync(cover, { force: true });
+    } catch {
+      // Best-effort: the row is already gone, and a stray cover is harmless.
+    }
+  }
+
+  invalidateSearchIndex();
+  invalidateFilterListCache();
+  revalidatePath("/");
+  revalidatePath("/liked");
+  revalidatePath("/settings");
+  return { ok: true, removed: ids.length };
 }
 
 /** Open the work in the host machine's file manager: its folder, or — for a

@@ -8,8 +8,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { isNearEnd, resumePosition } from "@/lib/resume";
+import { useTranslations } from "@/lib/i18n/client";
 import { getResumeMode, getWavPlayback } from "./player-prefs";
+
+/**
+ * How many tracks in a row may be missing before the player stops skipping.
+ * Deleting a work's folder kills every track at once, and walking the whole
+ * queue to say so about each one helps nobody.
+ */
+const GONE_STREAK_LIMIT = 3;
 
 export interface QueueTrack {
   id: number;
@@ -84,6 +93,8 @@ const SILENCE_SRC =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslations();
+  const tRef = useRef(t);
   const [queue, setQueue] = useState<QueueTrack[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -127,12 +138,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const handoffTimerRef = useRef<number | null>(null);
   /** Track id whose load we have already retried once after an error. */
   const errorRetryRef = useRef<number | null>(null);
+  /** Track ids the server has confirmed are gone from disk, this session. */
+  const goneIdsRef = useRef<Set<number>>(new Set());
+  /** Consecutive missing tracks, reset by anything that actually plays. */
+  const goneStreakRef = useRef(0);
   const unlockedRef = useRef(false);
 
   const current = currentIndex >= 0 ? (queue[currentIndex] ?? null) : null;
 
   queueRef.current = queue;
   volumeRef.current = volume;
+  // The media handlers are bound once and read only refs, so the translator
+  // has to reach them the same way — a render-time closure would be stale.
+  tRef.current = t;
 
   function standbyDeck(): HTMLAudioElement | null {
     return activeIsARef.current ? deckBRef.current : deckARef.current;
@@ -574,6 +592,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // the advance persisted, so a later flush should record wherever it gets to.
       endedIdRef.current = null;
       errorRetryRef.current = null;
+      goneStreakRef.current = 0;
       setIsPlaying(true);
     }
 
@@ -591,23 +610,80 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       advance();
     }
 
-    function onError(this: HTMLAudioElement) {
+    /** Retries once, unless the server says the file is gone for good. */
+    function onError(this: HTMLAudioElement, e: Event) {
       if (!isActive(this)) return;
+      // Read now, not in the async continuation below: `currentTarget` is
+      // nulled once dispatch finishes.
+      const deck = e.currentTarget as HTMLAudioElement;
       const id = loadedIdRef.current;
       console.warn("[player] media error", this.error?.code, this.error?.message);
-      if (id === null || errorRetryRef.current === id) {
+      if (id === null) {
         setIsPlaying(false);
         return;
       }
-      errorRetryRef.current = id;
-      const at = this.currentTime || pendingStartRef.current || 0;
-      try {
-        this.load();
-        if (at > 0) this.currentTime = at;
-        playDeck(this, false);
-      } catch {
-        setIsPlaying(false);
+
+      if (goneIdsRef.current.has(id)) {
+        handleGone(id);
+        return;
       }
+
+      // A `MediaError` carries no HTTP status, so the only way to tell a
+      // deleted file from a dropped connection is to ask. One byte is enough.
+      void fetch(audioUrl(id), { headers: { Range: "bytes=0-0" } })
+        .then((res) => (res.status === 410 || res.status === 404 ? "gone" : "blip"))
+        .catch(() => "blip" as const)
+        .then((verdict) => {
+          // The probe is async: the user may have skipped on while it was in
+          // flight, in which case this deck and track are no longer current.
+          if (!isActive(deck) || loadedIdRef.current !== id) return;
+          if (verdict === "gone") {
+            handleGone(id);
+            return;
+          }
+          if (errorRetryRef.current === id) {
+            setIsPlaying(false);
+            return;
+          }
+          errorRetryRef.current = id;
+          const at = deck.currentTime || pendingStartRef.current || 0;
+          try {
+            deck.load();
+            if (at > 0) deck.currentTime = at;
+            playDeck(deck, false);
+          } catch {
+            setIsPlaying(false);
+          }
+        });
+    }
+
+    /**
+     * The file behind this track no longer exists. Say so and move on.
+     *
+     * Never retried: 410 is Gone, so asking again can only fail the same way.
+     * Deleting a folder strands every one of its tracks at once, so the run of
+     * failures is counted — past a few in a row the queue is clearly dead and
+     * skipping further would just be a stream of toasts.
+     */
+    function handleGone(id: number) {
+      goneIdsRef.current.add(id);
+      const title = queueRef.current[indexRef.current]?.title;
+      goneStreakRef.current += 1;
+
+      if (goneStreakRef.current > GONE_STREAK_LIMIT) {
+        toast.error(
+          tRef.current("player.manyMissing", { count: goneStreakRef.current }),
+        );
+        setIsPlaying(false);
+        return;
+      }
+
+      toast.error(tRef.current("player.trackMissing", { title: title ?? "" }));
+      const hasNext = queueRef.current[indexRef.current + 1] !== undefined;
+      // `false` — this is a skip, not a track that reached its end, so it must
+      // not be banked as finished.
+      advance(false);
+      if (!hasNext) setIsPlaying(false);
     }
 
     const events: Array<[string, EventListener]> = [

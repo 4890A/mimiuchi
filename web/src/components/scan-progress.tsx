@@ -182,6 +182,29 @@ export function useScanProgress(): {
           }),
           log: pushLog(prev, t("scan.log.tracks", { count: ev.tracks })),
         };
+      case "roots-unverified":
+        // Counted as an error on purpose: the scan finished, but it could not
+        // tell "deleted" from "drive not plugged in", so it changed nothing.
+        return {
+          ...prev,
+          errorCount: prev.errorCount + 1,
+          currentStatus: t("scan.status.rootsUnverified"),
+          log: pushLog(
+            prev,
+            t("scan.log.rootsUnverified", { roots: ev.roots.join(", ") }),
+          ),
+        };
+      case "missing-reconciled":
+        return {
+          ...prev,
+          log: pushLog(
+            prev,
+            t("scan.log.missingReconciled", {
+              marked: ev.marked,
+              restored: ev.restored,
+            }),
+          ),
+        };
       case "work-done":
         return prev;
       case "error":

@@ -83,10 +83,11 @@ async function build(): Promise<BuildResult> {
 
   const seiyuuRows = sqlite
     .prepare(
-      `SELECT va.id, va.name, va.name_en, COUNT(wva.work_id) AS work_count,
-              GROUP_CONCAT(wva.work_id) AS work_ids
+      `SELECT va.id, va.name, va.name_en, COUNT(w.id) AS work_count,
+              GROUP_CONCAT(w.id) AS work_ids
        FROM voice_actors va
        LEFT JOIN work_voice_actors wva ON wva.voice_actor_id = va.id
+       LEFT JOIN works w ON w.id = wva.work_id AND w.missing_since IS NULL
        GROUP BY va.id
        HAVING work_count > 0`,
     )
@@ -97,7 +98,7 @@ async function build(): Promise<BuildResult> {
       `SELECT c.id, c.name, c.name_en, COUNT(w.id) AS work_count,
               GROUP_CONCAT(w.id) AS work_ids
        FROM circles c
-       LEFT JOIN works w ON w.circle_id = c.id
+       LEFT JOIN works w ON w.circle_id = c.id AND w.missing_since IS NULL
        GROUP BY c.id
        HAVING work_count > 0`,
     )
@@ -105,10 +106,11 @@ async function build(): Promise<BuildResult> {
 
   const tagRows = sqlite
     .prepare(
-      `SELECT t.id, t.name, t.name_en, COUNT(wt.work_id) AS work_count,
-              GROUP_CONCAT(wt.work_id) AS work_ids
+      `SELECT t.id, t.name, t.name_en, COUNT(w.id) AS work_count,
+              GROUP_CONCAT(w.id) AS work_ids
        FROM tags t
        LEFT JOIN work_tags wt ON wt.tag_id = t.id
+       LEFT JOIN works w ON w.id = wt.work_id AND w.missing_since IS NULL
        GROUP BY t.id
        HAVING work_count > 0`,
     )
@@ -119,7 +121,8 @@ async function build(): Promise<BuildResult> {
       `SELECT w.id, w.title AS name, w.title_kana AS name_en,
               COALESCE(c.name, '') AS context, 1 AS work_count
        FROM works w
-       LEFT JOIN circles c ON c.id = w.circle_id`,
+       LEFT JOIN circles c ON c.id = w.circle_id
+       WHERE w.missing_since IS NULL`,
     )
     .all() as Array<Row & { context: string }>;
 

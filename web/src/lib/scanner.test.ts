@@ -355,6 +355,120 @@ test("drops asset rows for files that disappeared", async () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Works that vanish from disk
+// ---------------------------------------------------------------------------
+
+function missingSince(id: string): number | null {
+  const row = workRow(id);
+  return (row?.missing_since as number | null) ?? null;
+}
+
+test("a work whose folder is gone is flagged, not deleted", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+  await scan().run;
+  const trackId = (
+    sqlite.prepare(`SELECT id FROM tracks WHERE work_id = ?`).get(WORK_ID) as {
+      id: number;
+    }
+  ).id;
+  sqlite.prepare(`INSERT INTO likes (track_id) VALUES (?)`).run(trackId);
+
+  fs.rmSync(path.join(libraryRoot, WORK_ID), { recursive: true, force: true });
+  // A second work keeps the root non-empty, so the root still verifies.
+  makeWork("RJ00000123", ["keep.mp3"]);
+  stubMissing("RJ00000123");
+
+  const result = await scan().run;
+  assert.equal(result.worksMissing, 1);
+  assert.ok(missingSince(WORK_ID), "flagged");
+  assert.ok(workRow(WORK_ID), "the row itself survives");
+  assert.equal(
+    (sqlite.prepare(`SELECT COUNT(*) AS n FROM likes`).get() as { n: number }).n,
+    1,
+    "likes are untouched — nothing is deleted without the user asking",
+  );
+});
+
+test("an unreadable library root flags nothing", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+  await scan().run;
+
+  // Stand in for an unplugged drive: the root itself is gone. `findWorkEntries`
+  // swallows that and returns an empty map with no error, so without the
+  // explicit readability check every work would look deleted.
+  fs.rmSync(libraryRoot, { recursive: true, force: true });
+
+  const { run, events } = scan();
+  const result = await run;
+  assert.equal(result.worksMissing, 0);
+  assert.equal(missingSince(WORK_ID), null, "must not be flagged");
+  assert.ok(
+    events.some((e) => e.type === "roots-unverified"),
+    "and the scan says why",
+  );
+
+  resetDir(libraryRoot);
+});
+
+test("a readable but empty root flags nothing", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+  await scan().run;
+
+  // A reassigned drive letter lists empty rather than failing outright.
+  resetDir(libraryRoot);
+
+  const result = await scan().run;
+  assert.equal(missingSince(WORK_ID), null);
+  assert.equal(result.worksMissing, 0);
+});
+
+test("a work that comes back is unflagged", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  makeWork("RJ00000123", ["keep.mp3"]);
+  stubDlsite();
+  stubMissing("RJ00000123");
+  await scan().run;
+
+  fs.rmSync(path.join(libraryRoot, WORK_ID), { recursive: true, force: true });
+  await scan().run;
+  assert.ok(missingSince(WORK_ID), "flagged while away");
+
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  const result = await scan().run;
+  assert.equal(missingSince(WORK_ID), null, "cleared on its own");
+  assert.equal(result.worksMissing, 0);
+});
+
+test("an up-to-date library flags nothing", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  stubDlsite();
+  await scan().run;
+
+  // The quick-skip empties `workEntries` as it goes, so a check written
+  // against that map instead of a snapshot would flag the whole library here.
+  const result = await scan().run;
+  assert.equal(result.worksSkipped, 1, "the work was indeed skipped");
+  assert.equal(missingSince(WORK_ID), null);
+  assert.equal(result.worksMissing, 0);
+});
+
+test("a filtered scan flags nothing", async () => {
+  makeWork(WORK_ID, ["01 Intro.mp3"]);
+  makeWork("RJ00000123", ["keep.mp3"]);
+  stubDlsite();
+  stubMissing("RJ00000123");
+  await scan().run;
+
+  // Only looks at one work, so it knows nothing about the other.
+  stubDlsite();
+  await scan({ filterIds: new Set([WORK_ID]), forceMetadata: true }).run;
+  assert.equal(missingSince("RJ00000123"), null);
+});
+
 test("an extras scan finds a file added inside a subfolder", async () => {
   makeWork(WORK_ID, ["01 Intro.mp3", path.join("おまけ", "art.jpg")]);
   stubDlsite();

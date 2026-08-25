@@ -67,6 +67,14 @@ export const works = sqliteTable(
      *  NULL on every row that predates asset scanning, which is what makes the
      *  scanner walk each existing work exactly once to backfill it. */
     assetsScannedAt: integer("assets_scanned_at", { mode: "timestamp_ms" }),
+    /**
+     * When a scan last found this work's folder absent, or NULL while it is
+     * present. Marked rather than deleted: an unplugged drive looks exactly
+     * like a deleted library from the filesystem's side, and a flag is
+     * recoverable where a cascade delete would take likes, playback progress
+     * and tags with it. Cleared automatically when the folder reappears.
+     */
+    missingSince: integer("missing_since", { mode: "timestamp_ms" }),
     lastMetadataSyncAt: integer("last_metadata_sync_at", {
       mode: "timestamp_ms",
     }),

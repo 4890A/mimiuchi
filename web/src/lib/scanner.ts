@@ -10,6 +10,9 @@ import {
   upsertAsset,
   pruneAssetsNotIn,
   markAssetsScanned,
+  markWorksMissing,
+  clearWorksMissing,
+  listWorkIdsAndMissing,
   getWorkById,
   getWorkMetadataCounts,
   getAllWorkScanSnapshots,
@@ -66,6 +69,14 @@ export type ScanEvent =
   | { type: "meta-skipped"; workId: string }
   | { type: "tracks-done"; workId: string; tracks: number }
   | { type: "assets-done"; workId: string; assets: number }
+  /** Nothing was marked missing: these roots could not be proven readable. */
+  | { type: "roots-unverified"; roots: string[] }
+  | {
+      type: "missing-reconciled";
+      marked: number;
+      restored: number;
+      total: number;
+    }
   | { type: "work-done"; workId: string; title?: string; hasCover: boolean }
   | { type: "error"; workId?: string; message: string }
   | { type: "durations-start"; total: number }
@@ -109,6 +120,8 @@ export interface ScanResult {
   tracksScanned: number;
   /** Non-audio extras recorded: illustrations, おまけ videos, 台本. */
   assetsScanned: number;
+  /** Works on record whose folder this scan could not find. */
+  worksMissing: number;
   metadataFetched: number;
   errors: string[];
   /** Set when DLsite went away and the run stopped early. */
@@ -168,6 +181,18 @@ function recordEntry(
   }
 }
 
+/** Whether `dir` exists and can actually be listed, right now. */
+async function isReadableDir(dir: string): Promise<boolean> {
+  try {
+    const st = await fs.stat(dir);
+    if (!st.isDirectory()) return false;
+    await fs.readdir(dir);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function findWorkEntries(root: string): Promise<Map<string, WorkEntry>> {
   const found = new Map<string, WorkEntry>();
   async function scan(dir: string, depth: number): Promise<void> {
@@ -219,6 +244,7 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     worksSkipped: 0,
     tracksScanned: 0,
     assetsScanned: 0,
+    worksMissing: 0,
     metadataFetched: 0,
     errors: [],
   };
@@ -232,9 +258,20 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     emit({ type: "done", result });
     return result;
   }
+  // Roots that demonstrably listed content this run. A root missing from this
+  // set is the reason nothing gets marked missing below — see `canTrustAbsence`.
+  const verifiedRoots = new Set<string>();
   for (const root of opts.libraryRoots) {
     try {
       const found = await findWorkEntries(root);
+      // `findWorkEntries` swallows its own readdir failure and returns an
+      // empty map, so an unplugged drive arrives here looking exactly like a
+      // library the user emptied. Ask the filesystem directly, and treat a
+      // root that lists nothing as unproven either way — a reassigned drive
+      // letter reads as an empty directory rather than failing outright.
+      if (found.size > 0 && (await isReadableDir(root))) {
+        verifiedRoots.add(root);
+      }
       for (const [id, entry] of found) {
         // First root that contains a work wins; later duplicates are skipped,
         // unless the duplicate is the extracted copy of an archive we already
@@ -255,6 +292,11 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
 
   result.worksFound = workEntries.size;
+
+  // Taken here on purpose. The quick-skip below deletes up-to-date works out
+  // of `workEntries`, so anything comparing the database against that map
+  // afterwards would conclude the whole healthy library had vanished.
+  const foundIds = new Set(workEntries.keys());
 
   // Quick-skip: for incremental scans (not forceMetadata, not filterIds),
   // drop works that are already fully indexed and whose folder mtime hasn't
@@ -517,8 +559,69 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     }
   }
 
+  reconcileMissingWorks({
+    foundIds,
+    verifiedRoots,
+    libraryRoots: opts.libraryRoots,
+    partial: Boolean(opts.filterIds),
+    result,
+    emit,
+  });
+
   invalidateSearchIndex();
   invalidateFilterListCache();
   emit({ type: "done", result });
   return result;
+}
+
+/**
+ * Flags works whose folder this scan did not find, and unflags those that came
+ * back.
+ *
+ * Every guard here exists to keep a temporarily unreachable drive from
+ * emptying the library. Absence is only ever evidence of deletion when the
+ * place the work should have been was itself readable.
+ */
+function reconcileMissingWorks({
+  foundIds,
+  verifiedRoots,
+  libraryRoots,
+  partial,
+  result,
+  emit,
+}: {
+  foundIds: ReadonlySet<string>;
+  verifiedRoots: ReadonlySet<string>;
+  libraryRoots: string[];
+  partial: boolean;
+  result: ScanResult;
+  emit: (e: ScanEvent) => void;
+}): void {
+  // A filtered scan only looked at some of the library; the works it never
+  // visited are absent from `foundIds` for reasons that have nothing to do
+  // with the disk.
+  if (partial) return;
+
+  const unverified = libraryRoots.filter((r) => !verifiedRoots.has(r));
+  if (unverified.length > 0) {
+    emit({ type: "roots-unverified", roots: unverified });
+    return;
+  }
+
+  const known = listWorkIdsAndMissing();
+  const gone = known.filter((w) => !foundIds.has(w.id) && !w.missing);
+  const back = known.filter((w) => foundIds.has(w.id) && w.missing);
+
+  markWorksMissing(gone.map((w) => w.id), new Date());
+  clearWorksMissing(back.map((w) => w.id));
+
+  result.worksMissing = known.filter((w) => !foundIds.has(w.id)).length;
+  if (gone.length > 0 || back.length > 0) {
+    emit({
+      type: "missing-reconciled",
+      marked: gone.length,
+      restored: back.length,
+      total: result.worksMissing,
+    });
+  }
 }

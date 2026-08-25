@@ -42,6 +42,12 @@ A personal audio library web app for browsing and playing locally-stored audio w
 
 - Trigger a library scan from inside the app with live progress, including an
   extras-only pass that re-reads files without contacting DLsite
+- Delete a work's folder and the next scan hides it from the library, keeping
+  the entry — and its likes and playback progress — until you confirm removal
+  in Settings. A library root that can't be read is never mistaken for one that
+  was emptied, so an unplugged drive changes nothing
+- A track whose file has gone says so and the queue moves on, instead of the
+  player stalling on it
 - Single shared password login
 - Configure library roots, cover directory, and an optional outbound proxy from the settings page
 

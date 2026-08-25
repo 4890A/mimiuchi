@@ -29,6 +29,13 @@
       "when": 1787598573258,
       "tag": "0003_groovy_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787668677865,
+      "tag": "0004_clear_zombie",
+      "breakpoints": true
     }
   ]
 }

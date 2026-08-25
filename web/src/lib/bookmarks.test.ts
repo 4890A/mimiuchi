@@ -6,6 +6,7 @@ import { after, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   addBookmark,
+  deleteBookmarksForTracks,
   getBookmarks,
   getBookmarksForTracks,
   removeBookmark,
@@ -234,4 +235,33 @@ test("adding to a corrupt row repairs it", () => {
   writeRaw(TRACK, "garbage");
   assert.deepEqual(addBookmark(TRACK, 15), [15]);
   assert.equal(rawRow(TRACK), "[15]");
+});
+
+// ---------------------------------------------------------------------------
+// Cleanup when tracks go away
+// ---------------------------------------------------------------------------
+
+test("deleting tracks takes their bookmark rows with them", () => {
+  addBookmark(TRACK, 10);
+  addBookmark(OTHER, 20);
+  assert.equal(settingsRowCount(), 2);
+
+  deleteBookmarksForTracks([TRACK]);
+
+  // Nothing cascades these away on its own: they are keyed by track id in the
+  // settings table rather than joined to `tracks`, so without this they would
+  // outlive the track forever.
+  assert.equal(rawRow(TRACK), undefined);
+  assert.deepEqual(getBookmarks(OTHER), [20], "other tracks are left alone");
+  assert.equal(settingsRowCount(), 1);
+});
+
+test("deleting bookmarks for tracks that have none is a no-op", () => {
+  addBookmark(TRACK, 10);
+  deleteBookmarksForTracks([OTHER, 999]);
+  assert.deepEqual(getBookmarks(TRACK), [10]);
+  assert.equal(settingsRowCount(), 1);
+
+  deleteBookmarksForTracks([]);
+  assert.equal(settingsRowCount(), 1);
 });

@@ -1,7 +1,7 @@
 import "server-only";
 import fs from "node:fs";
 import path from "node:path";
-import { eq, desc, sql, asc, inArray, and } from "drizzle-orm";
+import { eq, desc, sql, asc, inArray, and, isNull } from "drizzle-orm";
 import { db, sqlite } from "./client";
 import { searchWorkIdsForQuery } from "../search/index-builder";
 import {
@@ -65,6 +65,9 @@ export async function listWorksFiltered(
     conds.push(inArray(works.circleId, f.circleIds));
   if (f.nsfw) conds.push(eq(works.nsfw, f.nsfw === "only"));
   if (f.archive) conds.push(eq(works.isArchive, f.archive === "only"));
+  // A work whose folder has gone drops out of every browse surface until a
+  // scan finds it again, or the user clears it out from Settings.
+  conds.push(isNull(works.missingSince));
 
   let baseQuery = db
     .select({
@@ -204,6 +207,7 @@ export function getWorkDetail(workId: string) {
       nsfw: works.nsfw,
       isArchive: works.isArchive,
       folderPath: works.folderPath,
+      missingSince: works.missingSince,
       circleName: circles.name,
       circleId: circles.id,
     })
@@ -311,10 +315,14 @@ export function listAllTags(): TagRow[] {
       id: tags.id,
       name: tags.name,
       nameEn: tags.nameEn,
-      workCount: sql<number>`count(${workTags.workId})`.as("c"),
+      workCount: sql<number>`count(${works.id})`.as("c"),
     })
     .from(tags)
     .leftJoin(workTags, eq(workTags.tagId, tags.id))
+    .leftJoin(
+      works,
+      and(eq(works.id, workTags.workId), isNull(works.missingSince)),
+    )
     .groupBy(tags.id)
     .orderBy(desc(sql`c`))
     .all();
@@ -326,10 +334,14 @@ export function listAllVoiceActors(): VARow[] {
       id: voiceActors.id,
       name: voiceActors.name,
       nameEn: voiceActors.nameEn,
-      workCount: sql<number>`count(${workVoiceActors.workId})`.as("c"),
+      workCount: sql<number>`count(${works.id})`.as("c"),
     })
     .from(voiceActors)
     .leftJoin(workVoiceActors, eq(workVoiceActors.voiceActorId, voiceActors.id))
+    .leftJoin(
+      works,
+      and(eq(works.id, workVoiceActors.workId), isNull(works.missingSince)),
+    )
     .groupBy(voiceActors.id)
     .orderBy(desc(sql`c`))
     .all();
@@ -344,7 +356,10 @@ export function listAllCircles(): CircleRow[] {
       workCount: sql<number>`count(${works.id})`.as("c"),
     })
     .from(circles)
-    .leftJoin(works, eq(works.circleId, circles.id))
+    .leftJoin(
+      works,
+      and(eq(works.circleId, circles.id), isNull(works.missingSince)),
+    )
     .groupBy(circles.id)
     .orderBy(desc(sql`c`))
     .all();
@@ -371,7 +386,10 @@ export function listAllCirclesWithRecentWorks(): CircleWithRecentWorks[] {
       workCount: sql<number>`count(${works.id})`.as("c"),
     })
     .from(circles)
-    .leftJoin(works, eq(works.circleId, circles.id))
+    .leftJoin(
+      works,
+      and(eq(works.circleId, circles.id), isNull(works.missingSince)),
+    )
     .groupBy(circles.id)
     .orderBy(desc(sql`c`))
     .all();
@@ -385,7 +403,7 @@ export function listAllCirclesWithRecentWorks(): CircleWithRecentWorks[] {
            ORDER BY COALESCE(w.release_date, '') DESC, w.created_at DESC
          ) AS rn
          FROM works w
-         WHERE w.circle_id IS NOT NULL
+         WHERE w.circle_id IS NOT NULL AND w.missing_since IS NULL
        )
        WHERE rn <= 4`,
     )
@@ -444,6 +462,7 @@ export function listRecentlyPlayedWorks(limit = 8): RecentWork[] {
     .innerJoin(tracks, eq(trackProgress.trackId, tracks.id))
     .innerJoin(works, eq(tracks.workId, works.id))
     .leftJoin(circles, eq(works.circleId, circles.id))
+    .where(isNull(works.missingSince))
     .groupBy(works.id)
     .orderBy(desc(sql`last_played_at`))
     .limit(limit)
@@ -474,7 +493,7 @@ export function listRandomWorks(limit = 8): RecentWork[] {
     .leftJoin(circles, eq(works.circleId, circles.id))
     // "On deck" is a play shortcut, so works still packed in an archive have
     // no business being shuffled into it.
-    .where(eq(works.isArchive, false))
+    .where(and(eq(works.isArchive, false), isNull(works.missingSince)))
     .orderBy(sql`RANDOM()`)
     .limit(limit)
     .all();

@@ -14,6 +14,7 @@ import {
   Mic2,
   PlugZap,
   ScrollText,
+  FolderX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useScanProgress } from "@/components/scan-progress";
+import { removeMissingWorks } from "@/lib/actions";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { AppearanceSettings } from "./appearance-settings";
@@ -50,15 +52,19 @@ export function SettingsForm({
   initial,
   effective,
   missingSeiyuuCount,
+  missingWorks,
 }: {
   initial: Settings;
   effective: { libraryRoots: string[]; coversDir: string };
   missingSeiyuuCount: number;
+  /** Works a scan found absent from disk, awaiting the user's go-ahead. */
+  missingWorks: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const scan = useScanProgress();
   const { t } = useTranslations();
   const [values, setValues] = useState<Settings>(initial);
+  const [removing, setRemoving] = useState(false);
   const [rootsText, setRootsText] = useState(initial.libraryRoots.join("\n"));
   const [saved, setSaved] = useState<Settings>(initial);
   const [saving, setSaving] = useState(false);
@@ -341,6 +347,55 @@ export function SettingsForm({
           />
         </CardContent>
       </Card>
+
+      {missingWorks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <FolderX className="h-4 w-4" />
+              {t("settings.missing.title", { count: missingWorks.length })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {t("settings.missing.body")}
+            </p>
+            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2 text-xs">
+              {missingWorks.map((w) => (
+                <li key={w.id} className="truncate">
+                  <span className="font-mono text-muted-foreground">{w.id}</span>{" "}
+                  {w.title}
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={removing}
+                onClick={async () => {
+                  setRemoving(true);
+                  const r = await removeMissingWorks();
+                  setRemoving(false);
+                  if (r.ok) {
+                    toast.success(
+                      t("settings.missing.removed", { count: r.removed }),
+                    );
+                    router.refresh();
+                  } else {
+                    toast.error(r.error);
+                  }
+                }}
+              >
+                {t("settings.missing.remove", { count: missingWorks.length })}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {t("settings.missing.keepHint")}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {scan.panel}
     </div>

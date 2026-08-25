@@ -61,6 +61,20 @@ function write(trackId: number, positions: number[]): number[] {
   return positions;
 }
 
+/**
+ * Drops the bookmark rows for tracks that are being deleted.
+ *
+ * Bookmarks live in `settings` keyed by track id rather than in a table with a
+ * foreign key, so nothing cascades them away on their own — without this they
+ * would sit in the table forever, keyed to tracks that no longer exist.
+ */
+export function deleteBookmarksForTracks(trackIds: number[]): void {
+  if (trackIds.length === 0) return;
+  db.delete(settingsTable)
+    .where(inArray(settingsTable.key, trackIds.map(rowKey)))
+    .run();
+}
+
 export function getBookmarks(trackId: number): number[] {
   const row = db
     .select()

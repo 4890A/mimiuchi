@@ -7,6 +7,7 @@ import {
   Globe,
   ShieldAlert,
   FileArchive,
+  FolderX,
   Tag as TagIcon,
 } from "lucide-react";
 import path from "node:path";
@@ -77,6 +78,14 @@ export default async function WorkPage({
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-1">
               <p className="font-mono text-xs text-muted-foreground">{work.id}</p>
+              {work.missingSince && (
+                // Reached by an old link or a bookmark: the work is hidden from
+                // every browse surface, but the page still opens and says why.
+                <p className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+                  <FolderX className="h-3.5 w-3.5 shrink-0" />
+                  <span>{t("work.missing", { folder: work.folderPath })}</span>
+                </p>
+              )}
               {work.isArchive && (
                 <p className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
                   <FileArchive className="h-3.5 w-3.5 shrink-0" />
