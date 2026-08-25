@@ -5,6 +5,7 @@ import { WorkCard } from "@/components/work-card";
 import {
   listWorksFiltered,
   listAllTags,
+  listFacetsForWorks,
   listAllVoiceActors,
   listAllCircles,
   listRecentlyPlayedWorks,
@@ -63,21 +64,32 @@ export default async function LibraryPage({
   const recent = hasFilters ? [] : listRecentlyPlayedWorks(8);
   const random = hasFilters ? [] : listRandomWorks(8);
 
-  const [works, allTags, allVAs, allCircles] = await Promise.all([
-    listWorksFiltered({
-      q: sp.q,
-      tagIds,
-      voiceActorIds: vaIds,
-      circleIds,
-      nsfw,
-      archive,
-      sort: sp.sort,
-      dir: sp.dir,
-    }),
-    Promise.resolve(listAllTags()),
-    Promise.resolve(listAllVoiceActors()),
-    Promise.resolve(listAllCircles()),
-  ]);
+  const works = await listWorksFiltered({
+    q: sp.q,
+    tagIds,
+    voiceActorIds: vaIds,
+    circleIds,
+    nsfw,
+    archive,
+    sort: sp.sort,
+    dir: sp.dir,
+  });
+
+  // What the filter menu offers, narrowed to the works actually showing: pick
+  // a tag and the only tags left are the ones those works carry. `works` is
+  // the complete filtered set — the page does not paginate — so its ids are
+  // all this needs.
+  const facets = listFacetsForWorks(works.map((w) => w.id));
+
+  // The unfiltered lists stay, but only to label the chips below. A voice
+  // actor or circle can narrow itself out of the menu, and the chip is then
+  // the only way to deselect it — resolving names from `facets` would take
+  // that away exactly when it is needed.
+  const [allTags, allVAs, allCircles] = [
+    listAllTags(),
+    listAllVoiceActors(),
+    listAllCircles(),
+  ];
 
   // Passed to each card so its tag/seiyuu chips add to the current filters
   // rather than replacing them.
@@ -150,7 +162,7 @@ export default async function LibraryPage({
                     {t("library.filter.voiceActors")}
                   </h3>
                   <VoiceActorFilter
-                    items={allVAs}
+                    items={facets.voiceActors}
                     selected={vaIds}
                   />
                 </section>
@@ -158,13 +170,13 @@ export default async function LibraryPage({
                   <h3 className="mb-2 text-sm font-medium">
                     {t("library.filter.circles")}
                   </h3>
-                  <CircleFilter items={allCircles} selected={circleIds} />
+                  <CircleFilter items={facets.circles} selected={circleIds} />
                 </section>
                 <section>
                   <h3 className="mb-2 text-sm font-medium">
                     {t("library.filter.tags")}
                   </h3>
-                  <TagFilter items={allTags} selected={tagIds} />
+                  <TagFilter items={facets.tags} selected={tagIds} />
                 </section>
               </div>
             </SheetContent>

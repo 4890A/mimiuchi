@@ -309,6 +309,114 @@ type CircleRow = { id: number; name: string; nameEn: string | null; workCount: n
  *  single indexed GROUP BYs, so we just run them fresh per request instead. */
 export function invalidateFilterListCache() {}
 
+export interface FacetLists {
+  tags: TagRow[];
+  voiceActors: VARow[];
+  circles: CircleRow[];
+}
+
+/**
+ * SQLite caps how many parameters one statement may bind, so a set of work ids
+ * is fed in batches and the counts summed afterwards. The library this was
+ * built against is nowhere near the limit; the batching is here so that stops
+ * being something to think about as it grows.
+ */
+const ID_BATCH = 900;
+
+function batched<T>(ids: string[], run: (batch: string[]) => T[]): T[] {
+  if (ids.length <= ID_BATCH) return run(ids);
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += ID_BATCH) {
+    out.push(...run(ids.slice(i, i + ID_BATCH)));
+  }
+  return out;
+}
+
+/** Sums duplicate rows from separate batches back into one list, count-first. */
+function mergeCounts<T extends { id: number | string; workCount: number }>(
+  rows: T[],
+): T[] {
+  const byId = new Map<T["id"], T>();
+  for (const row of rows) {
+    const seen = byId.get(row.id);
+    if (seen) seen.workCount += row.workCount;
+    else byId.set(row.id, { ...row });
+  }
+  return [...byId.values()].sort((a, b) => b.workCount - a.workCount);
+}
+
+/**
+ * The tags, voice actors and circles present on a specific set of works.
+ *
+ * Drives the filter menu, so that narrowing the library narrows what is left to
+ * narrow by: filter to ASMR and the only tags on offer are the ones that ASMR
+ * works actually carry, counted within that set.
+ *
+ * Note that voice actors and circles are OR filters, so unlike the AND-filtered
+ * tags they can narrow themselves out of reach — picking one leaves only the
+ * people it co-occurs with. `ActiveFilters` is what undoes a choice that has
+ * left the menu, which is why the page still resolves chip labels from the
+ * unfiltered lists.
+ */
+export function listFacetsForWorks(workIds: string[]): FacetLists {
+  if (workIds.length === 0) {
+    return { tags: [], voiceActors: [], circles: [] };
+  }
+
+  const tagRows = batched(workIds, (batch) =>
+    db
+      .select({
+        id: tags.id,
+        name: tags.name,
+        nameEn: tags.nameEn,
+        // Inner join, so every row counted is a real link — and `workIds` is
+        // already the visible set, so missing works never reach here.
+        workCount: sql<number>`count(${workTags.workId})`.as("c"),
+      })
+      .from(workTags)
+      .innerJoin(tags, eq(tags.id, workTags.tagId))
+      .where(inArray(workTags.workId, batch))
+      .groupBy(tags.id)
+      .all(),
+  );
+
+  const vaRows = batched(workIds, (batch) =>
+    db
+      .select({
+        id: voiceActors.id,
+        name: voiceActors.name,
+        nameEn: voiceActors.nameEn,
+        workCount: sql<number>`count(${workVoiceActors.workId})`.as("c"),
+      })
+      .from(workVoiceActors)
+      .innerJoin(voiceActors, eq(voiceActors.id, workVoiceActors.voiceActorId))
+      .where(inArray(workVoiceActors.workId, batch))
+      .groupBy(voiceActors.id)
+      .all(),
+  );
+
+  const circleRows = batched(workIds, (batch) =>
+    db
+      .select({
+        id: circles.id,
+        name: circles.name,
+        nameEn: sql<string | null>`null`.as("name_en"),
+        workCount: sql<number>`count(${works.id})`.as("c"),
+      })
+      .from(works)
+      .innerJoin(circles, eq(circles.id, works.circleId))
+      .where(inArray(works.id, batch))
+      .groupBy(circles.id)
+      .all(),
+  );
+
+  return {
+    tags: mergeCounts(tagRows),
+    voiceActors: mergeCounts(vaRows),
+    circles: mergeCounts(circleRows),
+  };
+}
+
 export function listAllTags(): TagRow[] {
   return db
     .select({
