@@ -40,6 +40,9 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  /** Bumped by `forgetProgress`, so views holding their own copies of a
+   *  track's position know to throw them away. */
+  progressEpoch: number;
 }
 
 interface PlayerActions {
@@ -50,6 +53,9 @@ interface PlayerActions {
   previous: () => void;
   seek: (seconds: number) => void;
   setVolume: (v: number) => void;
+  /** Drop the in-session positions for these tracks, after the stored ones
+   *  have been cleared server-side. Playback is not interrupted. */
+  forgetProgress: (trackIds: number[]) => void;
 }
 
 const PlayerContext = createContext<(PlayerState & PlayerActions) | null>(null);
@@ -101,6 +107,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
+  const [progressEpoch, setProgressEpoch] = useState(0);
 
   // Two decks. The active one plays; the standby one is loaded and buffered with
   // the next queue entry so that advancing costs a single synchronous play().
@@ -534,6 +541,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (deckBRef.current) deckBRef.current.volume = v;
   }, []);
 
+  const forgetProgress = useCallback((trackIds: number[]) => {
+    if (trackIds.length === 0) return;
+    const ids = new Set(trackIds);
+    for (const id of ids) sessionPosRef.current.delete(id);
+    // A queued track still carries the position it was enqueued with, so
+    // without this it would resume mid-way the next time it came round.
+    setQueue((prev) =>
+      prev.some((t) => ids.has(t.id))
+        ? prev.map((t) =>
+            ids.has(t.id) ? { ...t, initialPosition: 0, completed: false } : t,
+          )
+        : prev,
+    );
+    setProgressEpoch((n) => n + 1);
+  }, []);
+
   // Wire up both decks. Every handler ignores the standby deck, except
   // `loadedmetadata`, which is how the standby settles its start position.
   useEffect(() => {
@@ -834,6 +857,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       currentTime,
       duration,
       volume,
+      progressEpoch,
       playQueue,
       playNow,
       togglePlay,
@@ -841,6 +865,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       previous,
       seek,
       setVolume,
+      forgetProgress,
     }),
     [
       queue,
@@ -850,6 +875,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       currentTime,
       duration,
       volume,
+      progressEpoch,
       playQueue,
       playNow,
       togglePlay,
@@ -857,6 +883,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       previous,
       seek,
       setVolume,
+      forgetProgress,
     ],
   );
 

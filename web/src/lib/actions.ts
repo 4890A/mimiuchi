@@ -18,7 +18,7 @@ import {
 } from "./db/schema";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache, listRandomWorks, type RecentWork } from "./db/queries";
-import { upsertWork, listMissingWorks } from "./db/repository";
+import { upsertWork, listMissingWorks, deleteWorkProgress } from "./db/repository";
 import { deleteBookmarksForTracks } from "./bookmarks";
 import { fetchMetadata, downloadCover, DlsiteUnavailableError } from "./metadata";
 import { getSettings } from "./settings";
@@ -496,6 +496,22 @@ export async function revealWorkFolder(
   } catch (err) {
     return { ok: false, error: String(err) };
   }
+}
+
+/** Wipe a work's stored play positions. Unlike `saveProgress` this one
+ *  revalidates: the home page's "on deck" rail is a projection of exactly these
+ *  rows, so the work has to stop showing up there. */
+export async function clearWorkProgress(
+  workId: string,
+): Promise<{ ok: true; cleared: number } | { ok: false; error: string }> {
+  const work = db.select({ id: works.id }).from(works).where(eq(works.id, workId)).get();
+  if (!work) return { ok: false, error: "work not found" };
+
+  const cleared = deleteWorkProgress(workId);
+
+  revalidatePath("/");
+  revalidatePath(`/works/${workId}`);
+  return { ok: true, cleared };
 }
 
 export async function saveProgress(

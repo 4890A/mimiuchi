@@ -9,6 +9,7 @@ import {
   workVoiceActors,
   workTags,
   tracks,
+  trackProgress,
   trackWaveforms,
   workAssets,
   type NewWork,
@@ -442,6 +443,29 @@ export function pruneTracksNotIn(
   if (toDelete.length > 0) {
     db.delete(tracks).where(inArray(tracks.id, toDelete)).run();
   }
+}
+
+/**
+ * Forget where every track of `workId` got to, and return how many stored
+ * positions were dropped.
+ *
+ * The "on deck" rail keys off a work having *any* `track_progress` row at all —
+ * position and `completed` don't enter into it — so removing the rows is also
+ * what takes the work off that rail. Likes, bookmarks and the tracks themselves
+ * are left alone; only the playback positions go.
+ */
+export function deleteWorkProgress(workId: string): number {
+  const trackIds = db
+    .select({ id: tracks.id })
+    .from(tracks)
+    .where(eq(tracks.workId, workId))
+    .all()
+    .map((t) => t.id);
+  if (trackIds.length === 0) return 0;
+  return db
+    .delete(trackProgress)
+    .where(inArray(trackProgress.trackId, trackIds))
+    .run().changes;
 }
 
 export function getWorkById(id: string) {

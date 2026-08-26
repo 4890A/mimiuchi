@@ -19,6 +19,7 @@ import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
+import { ClearProgressButton } from "@/components/clear-progress-button";
 import { EditWorkDialog } from "@/components/edit-work-dialog";
 import { WorkExtras } from "@/components/work-extras";
 import { ScriptReaderProvider } from "@/components/script-reader";
@@ -50,6 +51,8 @@ export default async function WorkPage({
   // Added by hand from a folder with no work id: there is no listing behind it,
   // so the DLsite-shaped furniture below is hidden rather than dead.
   const isManual = work.metadataSource === "manual";
+  // Whether there is anything for the clear-progress button to clear.
+  const hasProgress = work.tracks.some((tr) => tr.progress);
 
   // Scripts the in-app reader can render, in the order getWorkDetail returned
   // them (numbered ones first, unnumbered after). PDFs are excluded — they
@@ -239,12 +242,23 @@ export default async function WorkPage({
             drive the same single reader instance. */}
         <ScriptReaderProvider scripts={readableScripts}>
           <section className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold">
-              {t("work.tracks")}
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {work.tracks.length}
-              </span>
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">
+                {t("work.tracks")}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {work.tracks.length}
+                </span>
+              </h2>
+              {/* Sits over the progress bars it erases. Absent when there are
+                  none, so it is never a no-op. */}
+              {hasProgress && (
+                <ClearProgressButton
+                  workId={work.id}
+                  workTitle={work.title}
+                  trackIds={work.tracks.map((tr) => tr.id)}
+                />
+              )}
+            </div>
             {work.tracks.length === 0 ? (
               <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 {work.isArchive

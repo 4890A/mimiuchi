@@ -34,6 +34,9 @@ type TrackWithProgress = Track & {
   progress: { positionSeconds: number; completed: boolean } | null;
 };
 
+/** Shared empty map, so "nothing banked yet" is a stable reference. */
+const EMPTY_POSITIONS: ReadonlyMap<number, number> = new Map();
+
 function formatDuration(s: number | null) {
   if (!s || !Number.isFinite(s)) return "—";
   const m = Math.floor(s / 60);
@@ -107,13 +110,29 @@ export function TrackList({
   // user has played something it is stale. Remember where each track actually
   // got to this session, otherwise a row snaps back to its page-load position
   // the moment playback moves on to the next track.
-  const [sessionPositions, setSessionPositions] = useState<Map<number, number>>(
-    () => new Map(),
-  );
+  //
+  // Stamped with the player's progress epoch so that clearing a work's
+  // progress discards them: a stamp that no longer matches reads as empty,
+  // rather than being wiped by an effect after the fact.
+  const [session, setSession] = useState<{
+    epoch: number;
+    map: ReadonlyMap<number, number>;
+  }>(() => ({ epoch: 0, map: EMPTY_POSITIONS }));
+  const progressEpoch = p.progressEpoch;
+  const sessionPositions =
+    session.epoch === progressEpoch ? session.map : EMPTY_POSITIONS;
+
   const latestTimeRef = useRef(0);
   useEffect(() => {
     latestTimeRef.current = p.currentTime;
   }, [p.currentTime]);
+
+  // Read by the cleanup below, which must not re-run on an epoch change —
+  // doing so would bank the playing track's position right back.
+  const epochRef = useRef(progressEpoch);
+  useEffect(() => {
+    epochRef.current = progressEpoch;
+  }, [progressEpoch]);
 
   const currentId = p.current?.id;
   useEffect(() => {
@@ -121,7 +140,12 @@ export function TrackList({
     // On the way out, bank the position this track reached.
     return () => {
       const reached = latestTimeRef.current;
-      setSessionPositions((prev) => new Map(prev).set(currentId, reached));
+      setSession((prev) => {
+        const epoch = epochRef.current;
+        const map = new Map(prev.epoch === epoch ? prev.map : EMPTY_POSITIONS);
+        map.set(currentId, reached);
+        return { epoch, map };
+      });
     };
   }, [currentId]);
 
