@@ -18,7 +18,20 @@ export interface NormalizedWork {
   source: "dlsite" | "manual";
 }
 
-export const RJ_REGEX = /\b(RJ|VJ|BJ)\d{6,8}\b/i;
+/**
+ * A work id, anchored so it is never found inside a longer token.
+ *
+ * `\b` cannot do this job: `_` is a word character, so a trailing `\b` refuses
+ * `RJ01124146_MP3V0` — the shape DLsite's own downloader produces — and a
+ * leading one refuses `耳フェラ。_RJ191210`. Both are common enough that the
+ * scanner was silently skipping a hundred real works.
+ *
+ * So: reject a preceding letter or digit, which is what `xRJ123456` and
+ * `ARJ123456` need, while letting `_` and punctuation through; and reject a
+ * following digit, so 9-or-more-digit strings still fail rather than matching
+ * their first 8.
+ */
+export const RJ_REGEX = /(?<![A-Za-z0-9])(RJ|VJ|BJ)\d{6,8}(?!\d)/i;
 
 export function extractWorkId(input: string): string | null {
   const m = input.toUpperCase().match(RJ_REGEX);
