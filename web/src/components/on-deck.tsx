@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { History, Shuffle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { coverSrc } from "@/lib/cover";
+import { coverSrc, hasCover } from "@/lib/cover";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { cn } from "@/lib/utils";
 import { getRandomWorks } from "@/lib/actions";
 import { useTranslations } from "@/lib/i18n/client";
@@ -96,17 +97,21 @@ export function OnDeck({
             className="group relative block w-40 shrink-0 sm:w-48"
           >
             <div className="relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={coverSrc({
-                  id: w.id,
-                  coverUrl: w.coverUrl,
-                  hasLocalCover: w.hasLocalCover,
-                })}
-                alt=""
-                loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
+              {hasCover(w) ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={coverSrc({
+                    id: w.id,
+                    coverUrl: w.coverUrl,
+                    hasLocalCover: w.hasLocalCover,
+                  })}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <CoverPlaceholder />
+              )}
               {w.nsfw && (
                 <Badge
                   variant="destructive"

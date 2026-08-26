@@ -204,11 +204,20 @@ export async function refreshWorkMetadata(
       folderPath: works.folderPath,
       coverPath: works.coverPath,
       isArchive: works.isArchive,
+      metadataSource: works.metadataSource,
     })
     .from(works)
     .where(eq(works.id, workId))
     .get();
   if (!row) return { ok: false, error: "work not found" };
+  // A hand-entered work's id is a hash of its folder path, not a workno.
+  // Asking DLsite about it is a guaranteed 404 dressed up as a real attempt.
+  if (row.metadataSource === "manual") {
+    return {
+      ok: false,
+      error: "this work was added by hand — there is no DLsite listing to refresh from",
+    };
+  }
 
   let metadata;
   try {

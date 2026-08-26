@@ -1,8 +1,13 @@
 import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { extractWorkId, isArchiveFile } from "./metadata/types";
 import { fetchMetadata, downloadCover, DlsiteUnavailableError } from "./metadata";
+import {
+  AUDIO_EXTS,
+  createDiscovery,
+  discoverRoot,
+  type WorkEntry,
+} from "./discovery";
 import {
   upsertWork,
   upsertTrack,
@@ -21,17 +26,6 @@ import { classifyAsset } from "./assets/classify";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache } from "./db/queries";
 import fsSync from "node:fs";
-
-const AUDIO_EXTS = new Set([
-  ".mp3",
-  ".flac",
-  ".wav",
-  ".m4a",
-  ".aac",
-  ".ogg",
-  ".opus",
-  ".wma",
-]);
 
 const TRACK_NUM_RE = /^\s*(\d{1,3})[\.\-_\s]/;
 
@@ -106,6 +100,14 @@ export interface ScanOptions {
    * until something forced a full rescan and re-fetched every listing.
    */
   skipMetadata?: boolean;
+  /**
+   * Turn folders that carry no work id into works, titled from the folder.
+   *
+   * The user-facing setting, threaded all the way down: it decides discovery,
+   * and it decides whether works already minted that way are still the
+   * scanner's business — see `reconcileMissingWorks`.
+   */
+  includeUnmatchedFolders?: boolean;
   /** If set, only scan works whose id is in this list. */
   filterIds?: ReadonlySet<string>;
   /** Backoff timings. Production uses the defaults; tests shrink them to 0. */
@@ -122,6 +124,8 @@ export interface ScanResult {
   assetsScanned: number;
   /** Works on record whose folder this scan could not find. */
   worksMissing: number;
+  /** Of `worksFound`, how many were claimed by folder name rather than id. */
+  worksManual: number;
   metadataFetched: number;
   errors: string[];
   /** Set when DLsite went away and the run stopped early. */
@@ -155,32 +159,6 @@ async function* walk(dir: string, depth = 0): AsyncGenerator<string> {
   }
 }
 
-/** A work as found on disk: an extracted folder, or the archive holding it. */
-export interface WorkEntry {
-  path: string;
-  isArchive: boolean;
-}
-
-/**
- * Records a discovery, letting an extracted folder win over an archive.
- *
- * A library in mid-unpack has both — the folder the user just extracted and
- * the .zip they haven't deleted yet. The folder is the one with playable
- * files, so it takes the slot regardless of which turned up first, and the
- * archive is dropped. Between two of the same kind the first still wins, so
- * root order keeps deciding duplicates.
- */
-function recordEntry(
-  found: Map<string, WorkEntry>,
-  id: string,
-  entry: WorkEntry,
-): void {
-  const existing = found.get(id);
-  if (!existing || (existing.isArchive && !entry.isArchive)) {
-    found.set(id, entry);
-  }
-}
-
 /** Whether `dir` exists and can actually be listed, right now. */
 async function isReadableDir(dir: string): Promise<boolean> {
   try {
@@ -193,35 +171,17 @@ async function isReadableDir(dir: string): Promise<boolean> {
   }
 }
 
-async function findWorkEntries(root: string): Promise<Map<string, WorkEntry>> {
-  const found = new Map<string, WorkEntry>();
-  async function scan(dir: string, depth: number): Promise<void> {
-    if (depth > 4) return;
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      const full = path.join(dir, e.name);
-      if (e.isFile()) {
-        if (!isArchiveFile(e.name)) continue;
-        const id = extractWorkId(e.name);
-        if (id) recordEntry(found, id, { path: full, isArchive: true });
-        continue;
-      }
-      if (!e.isDirectory()) continue;
-      const id = extractWorkId(e.name);
-      if (id) {
-        recordEntry(found, id, { path: full, isArchive: false });
-      } else {
-        await scan(full, depth + 1);
-      }
-    }
-  }
-  await scan(root, 0);
-  return found;
+/**
+ * Is this work one nobody can look up?
+ *
+ * Two sources, because they answer at different moments: the entry knows
+ * before anything is written, which is what keeps the very first scan of a new
+ * folder from asking DLsite about `LOCAL-…`, and the stored source knows
+ * afterwards, which covers a row whose folder the current settings no longer
+ * claim.
+ */
+function isManualEntry(entry: WorkEntry, storedSource?: string | null): boolean {
+  return entry.isManual === true || storedSource === "manual";
 }
 
 function makeTrackTitle(filename: string): {
@@ -245,12 +205,15 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     tracksScanned: 0,
     assetsScanned: 0,
     worksMissing: 0,
+    worksManual: 0,
     metadataFetched: 0,
     errors: [],
   };
   const emit = (e: ScanEvent) => opts.onEvent?.(e);
+  const includeUnmatched = Boolean(opts.includeUnmatchedFolders);
 
-  const workEntries = new Map<string, WorkEntry>();
+  const discovery = createDiscovery();
+  const workEntries = discovery.entries;
   if (opts.libraryRoots.length === 0) {
     const message = "No library roots configured";
     result.errors.push(message);
@@ -263,20 +226,21 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   const verifiedRoots = new Set<string>();
   for (const root of opts.libraryRoots) {
     try {
-      const found = await findWorkEntries(root);
-      // `findWorkEntries` swallows its own readdir failure and returns an
-      // empty map, so an unplugged drive arrives here looking exactly like a
-      // library the user emptied. Ask the filesystem directly, and treat a
-      // root that lists nothing as unproven either way — a reassigned drive
-      // letter reads as an empty directory rather than failing outright.
-      if (found.size > 0 && (await isReadableDir(root))) {
+      // First root that contains a work wins; later duplicates are skipped,
+      // unless the duplicate is the extracted copy of an archive we already
+      // have — see `recordEntry`. Manual entries count towards the tally too,
+      // or a root holding nothing but hand-entered works would read as
+      // unverified and suppress reconciliation for the whole library.
+      const found = await discoverRoot(root, discovery, {
+        includeUnmatched,
+      });
+      // `discoverRoot` swallows its own readdir failure and claims nothing, so
+      // an unplugged drive arrives here looking exactly like a library the
+      // user emptied. Ask the filesystem directly, and treat a root that lists
+      // nothing as unproven either way — a reassigned drive letter reads as an
+      // empty directory rather than failing outright.
+      if (found > 0 && (await isReadableDir(root))) {
         verifiedRoots.add(root);
-      }
-      for (const [id, entry] of found) {
-        // First root that contains a work wins; later duplicates are skipped,
-        // unless the duplicate is the extracted copy of an archive we already
-        // have — see recordEntry.
-        recordEntry(workEntries, id, entry);
       }
     } catch (err) {
       const message = `Failed to read library root ${root}: ${String(err)}`;
@@ -292,6 +256,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
   }
 
   result.worksFound = workEntries.size;
+  for (const entry of workEntries.values()) {
+    if (entry.isManual) result.worksManual++;
+  }
 
   // Taken here on purpose. The quick-skip below deletes up-to-date works out
   // of `workEntries`, so anything comparing the database against that map
@@ -314,12 +281,19 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
       Array.from(workEntries.entries()).map(async ([id, entry]) => {
         const snap = snapshots.get(id);
         if (!snap) return; // new work — must scan
-        if (!snap.metadataSource || !snap.lastMetadataSyncAt) return;
-        // HVDB is no longer a source, so its rows are due a DLsite refresh
-        // even though they look complete.
-        if (snap.metadataSource === "hvdb") return;
-        if (snap.tagCount === 0) return;
-        if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
+        // A hand-entered work has no listing to be synced against, no cover
+        // until someone uploads one and no tags until someone types them, so
+        // three of the conditions below can never hold and it would be
+        // re-walked on every scan forever. Its folder mtime is the only thing
+        // that can tell us anything, and it is enough.
+        if (!isManualEntry(entry, snap.metadataSource)) {
+          if (!snap.metadataSource || !snap.lastMetadataSyncAt) return;
+          // HVDB is no longer a source, so its rows are due a DLsite refresh
+          // even though they look complete.
+          if (snap.metadataSource === "hvdb") return;
+          if (snap.tagCount === 0) return;
+          if (!snap.coverPath || !fsSync.existsSync(snap.coverPath)) return;
+        }
         if (!snap.lastScannedAt) return;
         // Indexed before extras existed. One re-walk backfills its assets and
         // stamps the column, after which this guard stops firing. Costs a
@@ -357,7 +331,13 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
       const coverMissing =
         !existing?.coverPath || !fsSync.existsSync(existing.coverPath);
       const tagsMissing = counts.tagCount === 0;
+      const isManual = isManualEntry(entry, existing?.metadataSource);
       const needsMeta =
+        // There is no listing behind a hand-entered work. Without this gate
+        // `idVariants` passes `LOCAL-…` through verbatim, every scan burns a
+        // 404 on it and pushes "No metadata found" into `result.errors` —
+        // which is also what makes `pnpm scan` exit 1.
+        !isManual &&
         !opts.skipMetadata &&
         (opts.forceMetadata ||
         !existing?.metadataSource ||
@@ -430,6 +410,8 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
             metadata: null,
             coverPath,
             isArchive: entry.isArchive,
+            isManual,
+            fallbackTitle: isManual ? path.basename(workPath) : undefined,
           });
           if (!existing) result.worksNew++;
           break;
@@ -472,6 +454,9 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
         metadata,
         coverPath,
         isArchive: entry.isArchive,
+        isManual,
+        // Insert-only, so a rescan can never walk back a hand-edited title.
+        fallbackTitle: isManual ? path.basename(workPath) : undefined,
       });
       if (!existing) result.worksNew++;
 
@@ -564,6 +549,7 @@ export async function scanLibrary(opts: ScanOptions): Promise<ScanResult> {
     verifiedRoots,
     libraryRoots: opts.libraryRoots,
     partial: Boolean(opts.filterIds),
+    includeUnmatched,
     result,
     emit,
   });
@@ -587,6 +573,7 @@ function reconcileMissingWorks({
   verifiedRoots,
   libraryRoots,
   partial,
+  includeUnmatched,
   result,
   emit,
 }: {
@@ -594,6 +581,8 @@ function reconcileMissingWorks({
   verifiedRoots: ReadonlySet<string>;
   libraryRoots: string[];
   partial: boolean;
+  /** False means discovery never looked for manual works — see below. */
+  includeUnmatched: boolean;
   result: ScanResult;
   emit: (e: ScanEvent) => void;
 }): void {
@@ -608,7 +597,14 @@ function reconcileMissingWorks({
     return;
   }
 
-  const known = listWorkIdsAndMissing();
+  // With the setting off, discovery did not go looking for hand-entered works,
+  // so their absence from `foundIds` says nothing about the disk. Leaving them
+  // in would flag every one of them missing and offer them all up for deletion
+  // in Settings — for the crime of unticking a checkbox. A work you typed in
+  // by hand is simply not the scanner's business while it is off.
+  const known = listWorkIdsAndMissing().filter(
+    (w) => includeUnmatched || w.metadataSource !== "manual",
+  );
   const gone = known.filter((w) => !foundIds.has(w.id) && !w.missing);
   const back = known.filter((w) => foundIds.has(w.id) && w.missing);
 

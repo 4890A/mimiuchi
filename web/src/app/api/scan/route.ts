@@ -4,10 +4,28 @@ import { resolveLibraryRoots, resolveCoversDir } from "@/lib/config";
 import { getSettings } from "@/lib/settings";
 import { listWorkIdsMissingSeiyuu } from "@/lib/db/repository";
 
+/**
+ * The scan flags, as `scan-progress.tsx` serializes them.
+ *
+ * Independent booleans, one per flag, so adding a mode is a line here and a
+ * line there rather than another branch of an if/else chain that could only
+ * ever express one mode at a time.
+ */
+function parseScanOptions(url: URL) {
+  const on = (name: string) => url.searchParams.get(name) === "1";
+  return {
+    force: on("force"),
+    // Re-reads every work's files without touching DLsite. The middle ground
+    // between an incremental scan, which cannot see a file added inside a
+    // subfolder, and a force rescan, which re-fetches every listing to find it.
+    extras: on("extras"),
+    missingSeiyuu: on("missingSeiyuu"),
+  };
+}
+
 export async function POST(req: Request) {
   const url = new URL(req.url);
-  const force = url.searchParams.get("force") === "1";
-  const mode = url.searchParams.get("mode");
+  const { force, extras: extrasOnly, missingSeiyuu } = parseScanOptions(url);
   const encoder = new TextEncoder();
 
   const settings = getSettings();
@@ -16,11 +34,6 @@ export async function POST(req: Request) {
 
   let filterIds: ReadonlySet<string> | undefined;
   let forceMetadata = force;
-  const missingSeiyuu = mode === "missing-seiyuu";
-  // Re-reads every work's files without touching DLsite. The middle ground
-  // between an incremental scan, which cannot see a file added inside a
-  // subfolder, and a force rescan, which re-fetches every listing to find it.
-  const extrasOnly = mode === "extras";
   if (missingSeiyuu) {
     filterIds = new Set(listWorkIdsMissingSeiyuu());
     forceMetadata = true;
@@ -39,6 +52,7 @@ export async function POST(req: Request) {
           coversDir,
           forceMetadata,
           skipMetadata: extrasOnly,
+          includeUnmatchedFolders: settings.includeUnmatchedFolders,
           filterIds,
           onEvent: (ev) => {
             // A scan cut short by a DLsite outage added no tracks worth

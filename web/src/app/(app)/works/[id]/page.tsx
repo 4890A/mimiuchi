@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import path from "node:path";
 import { getWorkDetail } from "@/lib/db/queries";
-import { coverSrc } from "@/lib/cover";
+import { coverSrc, hasCover } from "@/lib/cover";
 import { TrackList } from "@/components/track-row";
 import { CoverLightbox } from "@/components/cover-lightbox";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { AddTagButton } from "@/components/add-tag";
 import { RevealFolderButton } from "@/components/reveal-folder-button";
 import { DeleteWorkButton } from "@/components/delete-work-button";
@@ -45,6 +46,10 @@ export default async function WorkPage({
     },
     work.coverVersion,
   );
+  const coverExists = hasCover(work);
+  // Added by hand from a folder with no work id: there is no listing behind it,
+  // so the DLsite-shaped furniture below is hidden rather than dead.
+  const isManual = work.metadataSource === "manual";
 
   // Scripts the in-app reader can render, in the order getWorkDetail returned
   // them (numbered ones first, unnumbered after). PDFs are excluded — they
@@ -61,23 +66,36 @@ export default async function WorkPage({
   return (
     <div className="relative">
       <div className="absolute inset-x-0 top-0 -z-10 h-96 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={cover}
-          alt=""
-          className="h-full w-full scale-110 object-cover opacity-30 blur-3xl"
-        />
+        {/* Nothing to blur when there is no cover — the gradient alone is the
+            backdrop, which is what a missing image would have amounted to. */}
+        {coverExists && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={cover}
+            alt=""
+            className="h-full w-full scale-110 object-cover opacity-30 blur-3xl"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-background/80 to-background" />
       </div>
 
       <div className="mx-auto max-w-5xl px-3 py-6 sm:px-6 sm:py-10">
         <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
           <div className="mx-auto w-full max-w-[260px] shrink-0 sm:mx-0">
-            <CoverLightbox src={cover} alt={work.title} nsfw={work.nsfw} />
+            {coverExists ? (
+              <CoverLightbox src={cover} alt={work.title} nsfw={work.nsfw} />
+            ) : (
+              // No lightbox: there is nothing to enlarge.
+              <CoverPlaceholder className="aspect-[4/3] rounded-xl border shadow-2xl shadow-black/20 ring-1 ring-black/5" />
+            )}
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-1">
-              <p className="font-mono text-xs text-muted-foreground">{work.id}</p>
+              {/* `LOCAL-a1b2c3d4e5f6` is a hash of a folder path. It identifies
+                  the work to the database and to nobody else. */}
+              {!isManual && (
+                <p className="font-mono text-xs text-muted-foreground">{work.id}</p>
+              )}
               {work.missingSince && (
                 // Reached by an old link or a bookmark: the work is hidden from
                 // every browse surface, but the page still opens and says why.
@@ -191,6 +209,8 @@ export default async function WorkPage({
               <EditWorkDialog
                 workId={work.id}
                 coverSrc={cover}
+                hasCover={coverExists}
+                canRefresh={!isManual}
                 initial={{
                   title: work.title,
                   circleName: work.circleName,

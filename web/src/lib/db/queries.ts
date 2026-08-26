@@ -208,6 +208,9 @@ export function getWorkDetail(workId: string) {
       isArchive: works.isArchive,
       folderPath: works.folderPath,
       missingSince: works.missingSince,
+      // Decides whether the page shows the DLsite-only furniture: the raw work
+      // id, and the edit dialog's "Refresh from DLsite".
+      metadataSource: works.metadataSource,
       circleName: circles.name,
       circleId: circles.id,
     })

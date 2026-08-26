@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { FileArchive } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { coverSrc } from "@/lib/cover";
+import { coverSrc, hasCover } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 import { archiveLabel } from "@/lib/metadata/types";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { MoreTags } from "@/components/more-tags";
 import { TAG_CHIP_CLASS } from "@/lib/tag-chip";
 import type { WorkSummary } from "@/lib/db/queries";
@@ -48,17 +49,21 @@ export function WorkCard({
         data-nsfw-cover={work.nsfw ? "true" : undefined}
         className="relative block aspect-[4/3] overflow-hidden bg-muted"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={coverSrc({
-            id: work.id,
-            coverUrl: work.coverUrl,
-            hasLocalCover: work.hasLocalCover,
-          })}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        {hasCover(work) ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={coverSrc({
+              id: work.id,
+              coverUrl: work.coverUrl,
+              hasLocalCover: work.hasLocalCover,
+            })}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <CoverPlaceholder />
+        )}
         {work.nsfw && (
           <Badge
             variant="destructive"

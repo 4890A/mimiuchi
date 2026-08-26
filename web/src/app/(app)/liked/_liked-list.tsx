@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Play, Pause, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/like-button";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { usePlayer, type QueueTrack } from "@/components/player/player-store";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/client";
@@ -14,6 +15,8 @@ interface LikedTrack {
   workId: string;
   workTitle: string;
   cover: string;
+  /** False when `cover` points at a work with no image — draw a tile instead. */
+  hasCover: boolean;
   circleName: string | null;
   durationSeconds: number | null;
 }
@@ -122,12 +125,16 @@ export function LikedTrackList({ tracks }: { tracks: LikedTrack[] }) {
                 href={`/works/${t.workId}`}
                 className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={t.cover}
-                  alt=""
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
+                {t.hasCover ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={t.cover}
+                    alt=""
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <CoverPlaceholder />
+                )}
               </Link>
               <div className="min-w-0 flex-1">
                 <p

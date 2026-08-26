@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { mockNet, type MockNet } from "../test/net";
 import { scanLibrary, type ScanEvent } from "./scanner";
+import { manualWorkId } from "./discovery";
 import { BACKUP_TABLES } from "./backup";
 import { sqlite } from "./db/client";
 import { setSettings } from "./settings";
@@ -980,4 +981,207 @@ test("a work folder with no audio files still gets a row", async () => {
   assert.equal(result.worksFound, 1);
   assert.equal(result.tracksScanned, 0);
   assert.ok(workRow(WORK_ID));
+});
+
+// ---------------------------------------------------------------------------
+// Folders with no work id
+//
+// Every test here runs under `mockNet()`, which refuses real connections, so
+// *queuing no interceptor is itself the assertion that the scan stayed
+// offline*. A manual work that reached for DLsite would fail loudly.
+// ---------------------------------------------------------------------------
+
+/** The scan the setting turns on. */
+function scanUnmatched(overrides: Partial<Parameters<typeof scanLibrary>[0]> = {}) {
+  return scan({ includeUnmatchedFolders: true, ...overrides });
+}
+
+test("a folder with no work id becomes a work when the setting is on", async () => {
+  const dir = makeWork("Some Album", ["a.mp3"]);
+
+  const result = await scanUnmatched().run;
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.worksFound, 1);
+  assert.equal(result.worksManual, 1);
+
+  const work = workRow(manualWorkId(dir));
+  assert.ok(work, "the folder should have a row");
+  assert.equal(work.title, "Some Album", "titled from the folder");
+  assert.equal(work.metadata_source, "manual");
+  assert.equal(work.folder_path, dir);
+  assert.equal(work.cover_path, null);
+});
+
+test("a manual work's tracks are indexed, relative paths and all", async () => {
+  const dir = makeWork("Some Album", [
+    "01 Intro.mp3",
+    path.join("disc 2", "02 Main.flac"),
+  ]);
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.tracksScanned, 2);
+  assert.deepEqual(trackPaths(manualWorkId(dir)), [
+    "01 Intro.mp3",
+    path.join("disc 2", "02 Main.flac"),
+  ]);
+});
+
+test("a folder holding an RJ work is a container, not a work", async () => {
+  makeWork(path.join("エロ", WORK_ID), ["a.mp3"]);
+  stubDlsite();
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.worksFound, 1);
+  assert.equal(result.worksManual, 0);
+  assert.ok(workRow(WORK_ID));
+  assert.equal(workRow(manualWorkId(path.join(libraryRoot, "エロ"))), undefined);
+});
+
+test("a folder with an archived RJ work in it is a container too", async () => {
+  makeArchive(path.join("packed", `${WORK_ID}.zip`));
+  makeWork("packed", ["loose.mp3"]);
+  stubDlsite();
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.worksManual, 0, "the zip's id wins over the loose audio");
+  assert.ok(workRow(WORK_ID));
+});
+
+test("a folder with no audio is passed over", async () => {
+  makeWork("Images", ["a.jpg", "b.png"]);
+  makeWork("Video", ["trailer.mp4"]);
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.worksFound, 0);
+  assert.deepEqual(result.errors, []);
+});
+
+test("the shallowest folder wins, and nothing below it claims itself", async () => {
+  // Audio three levels down. Claiming on the way back up would mint a work at
+  // every level, which against a real library turned 8 folders into 347.
+  const top = makeWork(
+    path.join("会長DVD_C94号DL1", "disc", "tracks"),
+    ["a.mp3"],
+  );
+  assert.ok(top);
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.worksFound, 1, "exactly one work");
+  assert.equal(result.worksManual, 1);
+  const work = workRow(manualWorkId(path.join(libraryRoot, "会長DVD_C94号DL1")));
+  assert.ok(work, "and it is the top folder");
+  assert.equal(work.title, "会長DVD_C94号DL1");
+});
+
+test("a manual work never contacts DLsite", async () => {
+  makeWork("Ayaka", ["a.mp3"]);
+
+  const { run, events } = scanUnmatched();
+  const result = await run;
+
+  // Nothing was stubbed, so a lookup would have thrown. Belt and braces:
+  assert.deepEqual(result.errors, [], "no 'No metadata found for LOCAL-…'");
+  assert.equal(result.metadataFetched, 0);
+  assert.equal(events.some((e) => e.type === "fetch-meta"), false);
+  assert.ok(events.some((e) => e.type === "meta-skipped"));
+});
+
+test("a rescan does not clobber a hand-edited title", async () => {
+  const dir = makeWork("Some Album", ["a.mp3"]);
+  await scanUnmatched().run;
+  const id = manualWorkId(dir);
+
+  sqlite
+    .prepare(`UPDATE works SET title = ?, nsfw = 1 WHERE id = ?`)
+    .run("The Real Title", id);
+
+  // forceMetadata bypasses the quick-skip, so the row really is upserted again.
+  await scanUnmatched({ forceMetadata: true }).run;
+
+  const work = workRow(id);
+  assert.equal(work?.title, "The Real Title");
+  assert.equal(work?.nsfw, 1);
+});
+
+test("the same folder keeps its id across scans", async () => {
+  const dir = makeWork("Some Album", ["a.mp3"]);
+
+  await scanUnmatched().run;
+  const second = await scanUnmatched({ forceMetadata: true }).run;
+
+  assert.equal(second.worksNew, 0, "no duplicate row");
+  const rows = sqlite
+    .prepare(`SELECT id FROM works`)
+    .all() as Array<{ id: string }>;
+  assert.deepEqual(rows.map((r) => r.id), [manualWorkId(dir)]);
+});
+
+test("a manual work is not flagged missing when the setting is off", async () => {
+  const dir = makeWork("Some Album", ["a.mp3"]);
+  // An RJ work as well, so the root still verifies with the setting off and
+  // reconciliation actually runs — otherwise this would pass vacuously.
+  makeWork(WORK_ID, ["a.mp3"]);
+  stubDlsite(2);
+
+  await scanUnmatched().run;
+  const id = manualWorkId(dir);
+  assert.ok(workRow(id));
+
+  const result = await scan().run;
+
+  assert.equal(result.worksMissing, 0);
+  assert.equal(workRow(id)?.missing_since, null, "unticking a box is not a deletion");
+});
+
+test("a manual work whose folder really goes is flagged", async () => {
+  const dir = makeWork("Some Album", ["a.mp3"]);
+  makeWork(WORK_ID, ["a.mp3"]);
+  stubDlsite();
+
+  await scanUnmatched().run;
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  const result = await scanUnmatched().run;
+
+  assert.equal(result.worksMissing, 1);
+  assert.ok(workRow(manualWorkId(dir))?.missing_since);
+});
+
+test("a root of only manual works still verifies", async () => {
+  makeWork("Some Album", ["a.mp3"]);
+  // On record but not on disk: reconciliation has to run for this to be seen.
+  sqlite
+    .prepare(
+      `INSERT INTO works (id, title, folder_path) VALUES (?, ?, ?)`,
+    )
+    .run("RJ999999", "gone", path.join(libraryRoot, "RJ999999"));
+
+  const { run, events } = scanUnmatched();
+  const result = await run;
+
+  assert.equal(
+    events.some((e) => e.type === "roots-unverified"),
+    false,
+    "manual entries are evidence the root was readable",
+  );
+  assert.equal(result.worksMissing, 1);
+  assert.ok(workRow("RJ999999")?.missing_since);
+});
+
+test("with the setting off the scan is unchanged", async () => {
+  makeWork("Some Album", ["a.mp3"]);
+  makeWork(WORK_ID, ["a.mp3"]);
+  stubDlsite();
+
+  const result = await scan().run;
+
+  assert.equal(result.worksFound, 1);
+  assert.equal(result.worksManual, 0);
+  assert.deepEqual(result.errors, []);
 });

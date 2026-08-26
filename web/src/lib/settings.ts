@@ -11,6 +11,15 @@ export interface AppSettings {
   /** One or more library roots. Empty array → use env default. */
   libraryRoots: string[];
   coversDir: string;
+  /**
+   * Turn folders that carry no work id into works of their own, titled from
+   * the folder name and filled in by hand.
+   *
+   * Off by default, so upgrading changes nothing until it is ticked — and,
+   * just as importantly, so a library that is nothing but DLsite downloads
+   * never pays for the two extra subtree probes discovery needs to decide.
+   */
+  includeUnmatchedFolders: boolean;
 }
 
 const KEYS = {
@@ -19,6 +28,7 @@ const KEYS = {
   dlsiteMinIntervalMs: "dlsite.rateLimit.minIntervalMs",
   libraryRoots: "scan.libraryRoot",
   coversDir: "scan.coversDir",
+  includeUnmatchedFolders: "scan.includeUnmatchedFolders",
 } as const;
 
 /** One request per second: brisk enough for a big first scan, still polite. */
@@ -68,6 +78,7 @@ export function getSettings(): AppSettings {
     dlsiteMinIntervalMs: parseInterval(readKey(KEYS.dlsiteMinIntervalMs)),
     libraryRoots: parseRoots(readKey(KEYS.libraryRoots)),
     coversDir: readKey(KEYS.coversDir) ?? "",
+    includeUnmatchedFolders: readKey(KEYS.includeUnmatchedFolders) === "1",
   };
 }
 
@@ -93,6 +104,12 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
   }
   if (partial.coversDir !== undefined) {
     writeKey(KEYS.coversDir, partial.coversDir.trim());
+  }
+  if (partial.includeUnmatchedFolders !== undefined) {
+    writeKey(
+      KEYS.includeUnmatchedFolders,
+      partial.includeUnmatchedFolders ? "1" : "0",
+    );
   }
   return getSettings();
 }

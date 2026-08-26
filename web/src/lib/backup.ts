@@ -5,7 +5,8 @@ import path from "node:path";
 import { sqlite } from "./db/client";
 import { resolveLibraryRoots, resolveCoversDir } from "./config";
 import { getSettings } from "./settings";
-import { extractWorkId, isArchiveFile } from "./metadata/types";
+import { extractWorkId } from "./metadata/types";
+import { discoverWorks, type Discovery, type WorkEntry } from "./discovery";
 import { invalidateSearchIndex } from "./search/index-builder";
 import { invalidateFilterListCache } from "./db/queries";
 
@@ -290,70 +291,19 @@ export async function* streamBackup(): AsyncGenerator<string> {
 // Path remapping
 // ---------------------------------------------------------------------------
 
-/** Mirrors the scanner's folder discovery depth. */
-const RJ_SCAN_DEPTH = 4;
-
-/** Where a work id was found, mirroring the scanner's `WorkEntry`. */
-interface RjEntry {
-  path: string;
-  isArchive: boolean;
-}
-
-interface RjScanResult {
-  map: Map<string, RjEntry>;
-  /** Work id -> every directory that claimed it, when more than one did. */
-  duplicates: Map<string, string[]>;
-}
-
-function scanRjPaths(libraryRoots: string[]): RjScanResult {
-  const map = new Map<string, RjEntry>();
-  const duplicates = new Map<string, string[]>();
-
-  function record(id: string, entry: RjEntry): void {
-    const existing = map.get(id);
-    if (existing === undefined) {
-      map.set(id, entry);
-      return;
-    }
-    if (existing.path === entry.path) return;
-    // An extracted folder beats an archive of the same work, exactly as in the
-    // scanner, and the pair is not a conflict worth reporting.
-    if (existing.isArchive !== entry.isArchive) {
-      if (existing.isArchive) map.set(id, entry);
-      return;
-    }
-    // First match wins, matching the scanner. Remember the rest so restore can
-    // tell the user which library root it picked.
-    const seen = duplicates.get(id) ?? [existing.path];
-    seen.push(entry.path);
-    duplicates.set(id, seen);
-  }
-
-  function walk(dir: string, depth: number): void {
-    if (depth > RJ_SCAN_DEPTH) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isFile()) {
-        if (!isArchiveFile(entry.name)) continue;
-        const id = extractWorkId(entry.name);
-        if (id) record(id, { path: full, isArchive: true });
-        continue;
-      }
-      if (!entry.isDirectory()) continue;
-      const id = extractWorkId(entry.name);
-      if (id) record(id, { path: full, isArchive: false });
-      else walk(full, depth + 1);
-    }
-  }
-
-  for (const root of libraryRoots) walk(root, 0);
-  return { map, duplicates };
+/**
+ * Where every work in the library currently lives.
+ *
+ * Shares the scanner's walk rather than reimplementing it. It used to be a
+ * second copy, and a folder the scanner claimed but this one did not is a work
+ * whose `folder_path` restore quietly drops on the floor — which is precisely
+ * what would happen to every hand-entered work.
+ */
+async function scanRjPaths(
+  libraryRoots: string[],
+  includeUnmatched: boolean,
+): Promise<Discovery> {
+  return discoverWorks(libraryRoots, { includeUnmatched });
 }
 
 /**
@@ -362,11 +312,15 @@ function scanRjPaths(libraryRoots: string[]): RjScanResult {
  *
  * Restoring onto a different machine (or after reorganising the library) only
  * needs the RJ code to line up — the stored absolute path is rebuilt from
- * whatever the folder lives at now.
+ * whatever the folder lives at now. A hand-entered work's id is a hash of its
+ * path, so that trick only works for it while the path is unchanged.
  */
-export function buildRjPathMap(libraryRoots: string[]): Map<string, string> {
-  const { map } = scanRjPaths(libraryRoots);
-  return new Map(Array.from(map, ([id, entry]) => [id, entry.path]));
+export async function buildRjPathMap(
+  libraryRoots: string[],
+  includeUnmatched = false,
+): Promise<Map<string, string>> {
+  const { entries } = await scanRjPaths(libraryRoots, includeUnmatched);
+  return new Map(Array.from(entries, ([id, entry]) => [id, entry.path]));
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +444,7 @@ function makeImporter(
 }
 
 interface WorkRemap {
-  rjPathMap: Map<string, RjEntry>;
+  rjPathMap: Map<string, WorkEntry>;
   duplicates: Map<string, string[]>;
   coversDir: string;
   /** Work id -> cover filename carried by this backup. */
@@ -543,8 +497,14 @@ function remapWorkRow(row: BackupRow, ctx: WorkRemap): BackupRow {
 function indexCoversByWorkId(covers: Record<string, string>): Map<string, string> {
   const map = new Map<string, string>();
   for (const name of Object.keys(covers)) {
-    const id = extractWorkId(path.basename(name, path.extname(name)));
-    if (id && !map.has(id)) map.set(id, name);
+    const base = path.basename(name, path.extname(name));
+    // Covers are written as `${workId}${ext}`, so the basename *is* the id.
+    // Parsing an RJ code out of it is the older, narrower reading, kept
+    // because it tolerates a decorated filename; a hand-entered work has no
+    // code to find, and falling through to the basename is what keeps its
+    // cover attached across a restore.
+    const id = extractWorkId(base) ?? base;
+    if (!map.has(id)) map.set(id, name);
   }
   return map;
 }
@@ -582,7 +542,10 @@ export async function restoreBackup(
     );
   }
 
-  const { map: rjPathMap, duplicates } = scanRjPaths(libraryRoots);
+  const { entries: rjPathMap, duplicates } = await scanRjPaths(
+    libraryRoots,
+    settings.includeUnmatchedFolders,
+  );
   const remapCtx: WorkRemap = {
     rjPathMap,
     duplicates,

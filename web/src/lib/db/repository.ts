@@ -82,6 +82,16 @@ export interface UpsertWorkInput {
   coverPath?: string;
   /** `folderPath` points at an archive file rather than an extracted folder. */
   isArchive?: boolean;
+  /**
+   * Title to use when there is no metadata and no row yet — the folder's own
+   * name, for a work that was claimed by folder name alone.
+   *
+   * Insert-only, like `isManual`. On update the title belongs to whoever last
+   * typed it into the edit dialog.
+   */
+  fallbackTitle?: string;
+  /** Stamp `metadata_source = 'manual'` on insert. Never on update. */
+  isManual?: boolean;
 }
 
 export function upsertWork({
@@ -90,6 +100,8 @@ export function upsertWork({
   metadata,
   coverPath,
   isArchive = false,
+  fallbackTitle,
+  isManual = false,
 }: UpsertWorkInput): void {
   const circleId = metadata?.circleName
     ? upsertCircle(metadata.circleName, metadata.circleNameEn)
@@ -97,7 +109,9 @@ export function upsertWork({
 
   const values: NewWork = {
     id,
-    title: metadata?.title ?? id,
+    // `LOCAL-a1b2c3d4e5f6` means nothing to anyone, so a work with no listing
+    // behind it opens under its folder's name instead of its id.
+    title: metadata?.title ?? fallbackTitle ?? id,
     titleKana: metadata?.titleKana,
     circleId,
     releaseDate: metadata?.releaseDate,
@@ -111,7 +125,7 @@ export function upsertWork({
     nsfw: metadata?.nsfw ?? false,
     folderPath,
     isArchive,
-    metadataSource: metadata?.source,
+    metadataSource: metadata?.source ?? (isManual ? "manual" : undefined),
     lastScannedAt: new Date(),
     lastMetadataSyncAt: metadata ? new Date() : undefined,
   };
@@ -263,13 +277,27 @@ export function clearWorksMissing(ids: string[]): void {
 }
 
 /** Every work id with whether it is currently flagged missing. Cheap enough to
- *  pull whole — the scanner needs the full set to diff against the disk. */
-export function listWorkIdsAndMissing(): Array<{ id: string; missing: boolean }> {
+ *  pull whole — the scanner needs the full set to diff against the disk.
+ *  `metadataSource` rides along so it can tell which rows the current scan
+ *  settings were even looking for. */
+export function listWorkIdsAndMissing(): Array<{
+  id: string;
+  missing: boolean;
+  metadataSource: string | null;
+}> {
   return db
-    .select({ id: works.id, missingSince: works.missingSince })
+    .select({
+      id: works.id,
+      missingSince: works.missingSince,
+      metadataSource: works.metadataSource,
+    })
     .from(works)
     .all()
-    .map((r) => ({ id: r.id, missing: r.missingSince !== null }));
+    .map((r) => ({
+      id: r.id,
+      missing: r.missingSince !== null,
+      metadataSource: r.metadataSource ?? null,
+    }));
 }
 
 export interface MissingWork {
@@ -483,11 +511,20 @@ export function getAllWorkScanSnapshots(): Map<string, WorkScanSnapshot> {
   return out;
 }
 
+/**
+ * Works with no voice actor on record, for the "re-scan works missing seiyuu"
+ * row — which force-fetches every id it returns.
+ *
+ * Hand-entered works are excluded on purpose. They have no listing to fetch,
+ * they will never have a voice actor until someone types one in, and including
+ * them would mean every run of that scan tried to look each of them up.
+ */
 export function listWorkIdsMissingSeiyuu(): string[] {
   const rows = db
     .select({ id: works.id })
     .from(works)
     .leftJoin(workVoiceActors, eq(workVoiceActors.workId, works.id))
+    .where(sql`COALESCE(${works.metadataSource}, '') <> 'manual'`)
     .groupBy(works.id)
     .having(sql`COUNT(${workVoiceActors.voiceActorId}) = 0`)
     .all();

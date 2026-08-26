@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Heart } from "lucide-react";
 import { listLikedTracks } from "@/lib/db/queries";
-import { coverSrc } from "@/lib/cover";
+import { coverSrc, hasCover } from "@/lib/cover";
 import { LikedTrackList } from "./_liked-list";
 import { getTranslations } from "@/lib/i18n/server";
 
@@ -44,6 +44,9 @@ export default async function LikedPage() {
               coverPath: t.coverPath,
               hasLocalCover: Boolean(t.coverPath),
             }),
+            // The player still gets `cover` either way — a 404 is harmless as
+            // media-session artwork. This is only for the row's thumbnail.
+            hasCover: hasCover(t),
             circleName: t.circleName,
             durationSeconds: t.durationSeconds,
           }))}

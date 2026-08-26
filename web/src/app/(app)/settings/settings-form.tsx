@@ -40,6 +40,7 @@ interface Settings {
   dlsiteMinIntervalMs: number;
   libraryRoots: string[];
   coversDir: string;
+  includeUnmatchedFolders: boolean;
 }
 
 type TestResult =
@@ -84,7 +85,8 @@ export function SettingsForm({
     values.dlsiteProxyEnabled !== saved.dlsiteProxyEnabled ||
     values.dlsiteMinIntervalMs !== saved.dlsiteMinIntervalMs ||
     rootsChanged ||
-    values.coversDir !== saved.coversDir;
+    values.coversDir !== saved.coversDir ||
+    values.includeUnmatchedFolders !== saved.includeUnmatchedFolders;
 
   async function save(next: Settings = { ...values, libraryRoots: rootsFromText }) {
     setSaving(true);
@@ -275,6 +277,31 @@ export function SettingsForm({
             <p className="text-xs text-muted-foreground">
               {t("settings.paths.effective")}{" "}
               <span className="font-mono">{effective.coversDir}</span>
+            </p>
+          </div>
+          <div className="space-y-1.5 border-t pt-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={values.includeUnmatchedFolders}
+                onChange={(e) => {
+                  const next = {
+                    ...values,
+                    includeUnmatchedFolders: e.target.checked,
+                    libraryRoots: rootsFromText,
+                  };
+                  setValues({
+                    ...values,
+                    includeUnmatchedFolders: e.target.checked,
+                  });
+                  void save(next);
+                }}
+                className="h-4 w-4"
+              />
+              {t("settings.paths.includeUnmatched")}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {t("settings.paths.includeUnmatchedHint")}
             </p>
           </div>
         </CardContent>

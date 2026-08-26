@@ -332,15 +332,34 @@ test("path remapping finds RJ directories", async () => {
   assert.equal(row.folder_path, relocated);
 });
 
-test("buildRjPathMap maps ids to their directories", () => {
+test("buildRjPathMap maps ids to their directories", async () => {
   const a = path.join(libraryRoot, WORK_ID);
   const b = path.join(libraryRoot, "nested", "deeper", `[circle] ${OTHER_WORK_ID}`);
   fs.mkdirSync(a, { recursive: true });
   fs.mkdirSync(b, { recursive: true });
 
-  const map = backup.buildRjPathMap([libraryRoot]);
+  const map = await backup.buildRjPathMap([libraryRoot]);
   assert.equal(map.get(WORK_ID), a);
   assert.equal(map.get(OTHER_WORK_ID), b);
+});
+
+test("buildRjPathMap picks up an id-less folder only when asked", async () => {
+  const loose = path.join(libraryRoot, "Some Album");
+  fs.mkdirSync(loose, { recursive: true });
+  fs.writeFileSync(path.join(loose, "a.mp3"), Buffer.alloc(16, 1));
+
+  const off = await backup.buildRjPathMap([libraryRoot]);
+  assert.equal(
+    Array.from(off.values()).includes(loose),
+    false,
+    "restore must mirror a scan with the setting off",
+  );
+
+  const on = await backup.buildRjPathMap([libraryRoot], true);
+  assert.ok(
+    Array.from(on.values()).includes(loose),
+    "otherwise a restored manual work loses its folder",
+  );
 });
 
 test("work missing from disk keeps its old path and is flagged", async () => {

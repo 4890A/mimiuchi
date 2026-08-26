@@ -1,14 +1,25 @@
 import { scanLibrary, type ScanEvent } from "../src/lib/scanner";
-import { LIBRARY_ROOTS, COVERS_DIR } from "../src/lib/config";
+import { resolveLibraryRoots, resolveCoversDir } from "../src/lib/config";
+import { getSettings } from "../src/lib/settings";
 
 async function main() {
   const force = process.argv.includes("--force-metadata");
-  console.log(`Scanning ${LIBRARY_ROOTS.join(", ")}`);
-  console.log(`Covers -> ${COVERS_DIR}`);
+  // Same source of truth as the API route. Reading the env alone would mean a
+  // CLI scan silently ignored the paths — and now the folder setting — that
+  // the app itself is configured with.
+  const settings = getSettings();
+  const libraryRoots = resolveLibraryRoots(settings.libraryRoots);
+  const coversDir = resolveCoversDir(settings.coversDir);
+  console.log(`Scanning ${libraryRoots.join(", ")}`);
+  console.log(`Covers -> ${coversDir}`);
+  if (settings.includeUnmatchedFolders) {
+    console.log("Including folders with no work id");
+  }
   const result = await scanLibrary({
-    libraryRoots: LIBRARY_ROOTS,
-    coversDir: COVERS_DIR,
+    libraryRoots,
+    coversDir,
     forceMetadata: force,
+    includeUnmatchedFolders: settings.includeUnmatchedFolders,
     onEvent: (ev: ScanEvent) => {
       switch (ev.type) {
         case "start":

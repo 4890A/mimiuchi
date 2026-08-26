@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/client";
 
@@ -229,10 +230,16 @@ export function EditWorkDialog({
   workId,
   initial,
   coverSrc,
+  hasCover = true,
+  canRefresh = true,
 }: {
   workId: string;
   initial: EditWorkInitial;
   coverSrc: string;
+  /** False when `coverSrc` would 404 — show the placeholder tile instead. */
+  hasCover?: boolean;
+  /** False for a work added by hand: there is no listing to refresh from. */
+  canRefresh?: boolean;
 }) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
@@ -379,20 +386,22 @@ export function EditWorkDialog({
         <DialogHeader className="p-4 pb-2">
           <div className="mr-7 flex items-center justify-between gap-3">
             <DialogTitle>{t("edit.title")}</DialogTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              onClick={refreshFromDlsite}
-            >
-              {refreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              {refreshing ? t("edit.refreshing") : t("edit.refreshFromDlsite")}
-            </Button>
+            {canRefresh && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={refreshFromDlsite}
+              >
+                {refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {refreshing ? t("edit.refreshing") : t("edit.refreshFromDlsite")}
+              </Button>
+            )}
           </div>
         </DialogHeader>
 
@@ -400,12 +409,18 @@ export function EditWorkDialog({
           {/* Cover */}
           <div className="flex gap-3">
             <div className="h-24 w-32 shrink-0 overflow-hidden rounded-lg border bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={coverPreview ?? (coverUrl.trim() || coverSrc)}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+              {/* A pending upload or a typed-in URL is a cover even when the
+                  work has none saved yet, so either one wins over the tile. */}
+              {coverPreview ?? (coverUrl.trim() || hasCover) ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={coverPreview ?? (coverUrl.trim() || coverSrc)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <CoverPlaceholder />
+              )}
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <input

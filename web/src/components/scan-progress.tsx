@@ -15,6 +15,7 @@ type ScanResult = {
   worksFound: number;
   worksNew: number;
   worksSkipped: number;
+  worksManual: number;
   tracksScanned: number;
   metadataFetched: number;
   errors: string[];
@@ -49,6 +50,23 @@ function initialState(t: TFunction): ScanProgressState {
 export type ScanMode =
   | { kind: "library"; force?: boolean; missingSeiyuu?: boolean; extras?: boolean }
   | { kind: "durations"; all?: boolean };
+
+/**
+ * The library scan's flags, as a query string.
+ *
+ * One serializer, so the flags compose. This used to be an if/else chain that
+ * emitted a single `mode=` — which quietly made `extras`, `missingSeiyuu` and
+ * `force` mutually exclusive whatever the caller passed. `api/scan/route.ts`
+ * parses exactly these names.
+ */
+function libraryScanUrl(mode: Extract<ScanMode, { kind: "library" }>): string {
+  const params = new URLSearchParams();
+  if (mode.force) params.set("force", "1");
+  if (mode.extras) params.set("extras", "1");
+  if (mode.missingSeiyuu) params.set("missingSeiyuu", "1");
+  const query = params.toString();
+  return query ? `/api/scan?${query}` : "/api/scan";
+}
 
 export interface ScanProgressHandle {
   start: (mode?: ScanMode) => Promise<void>;
@@ -251,7 +269,26 @@ export function useScanProgress(): {
             }),
           ),
         };
-      case "done":
+      case "done": {
+        let log = pushLog(
+          prev,
+          t("scan.log.doneWorks", {
+            found: ev.result.worksFound,
+            added: ev.result.worksNew,
+            skipped: ev.result.worksSkipped,
+            tracks: ev.result.tracksScanned,
+            meta: ev.result.metadataFetched,
+            errors: ev.result.errors.length,
+          }),
+        );
+        // Only after ticking the setting does this number mean anything, and
+        // then it is the one thing you want to know: how many folders it took.
+        if (ev.result.worksManual > 0) {
+          log = [
+            ...log,
+            t("scan.log.doneManual", { count: ev.result.worksManual }),
+          ];
+        }
         return {
           ...prev,
           result: ev.result,
@@ -260,18 +297,9 @@ export function useScanProgress(): {
             found: ev.result.worksFound,
             skipped: ev.result.worksSkipped,
           }),
-          log: pushLog(
-            prev,
-            t("scan.log.doneWorks", {
-              found: ev.result.worksFound,
-              added: ev.result.worksNew,
-              skipped: ev.result.worksSkipped,
-              tracks: ev.result.tracksScanned,
-              meta: ev.result.metadataFetched,
-              errors: ev.result.errors.length,
-            }),
-          ),
+          log,
         };
+      }
       default:
         return prev;
     }
@@ -357,18 +385,17 @@ export function useScanProgress(): {
       startMsg = mode.all
         ? t("scan.start.durationsAll")
         : t("scan.start.durationsMissing");
-    } else if (mode.extras) {
-      url = "/api/scan?mode=extras";
-      startMsg = t("scan.start.extras");
-    } else if (mode.missingSeiyuu) {
-      url = "/api/scan?mode=missing-seiyuu";
-      startMsg = t("scan.start.missingSeiyuu");
-    } else if (mode.force) {
-      url = "/api/scan?force=1";
-      startMsg = t("scan.start.force");
     } else {
-      url = "/api/scan";
-      startMsg = t("scan.start.scan");
+      url = libraryScanUrl(mode);
+      // The flags compose; the opening line still has to pick one thing to
+      // say, so it names the most specific of them.
+      startMsg = mode.extras
+        ? t("scan.start.extras")
+        : mode.missingSeiyuu
+          ? t("scan.start.missingSeiyuu")
+          : mode.force
+            ? t("scan.start.force")
+            : t("scan.start.scan");
     }
 
     setState({ ...initialState(t), log: [startMsg], currentStatus: startMsg });

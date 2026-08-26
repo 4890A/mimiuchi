@@ -302,6 +302,9 @@ export const en = {
   "settings.paths.roots": "Library roots (one path per line)",
   "settings.paths.covers": "Covers directory",
   "settings.paths.effective": "Effective:",
+  "settings.paths.includeUnmatched": "Add folders that have no work id",
+  "settings.paths.includeUnmatchedHint":
+    "A folder holding audio but no RJ/VJ/BJ code — a Comiket release, loose files, anything bought outside DLsite — becomes a work of its own, titled after the folder. Nothing is looked up: fill in the details with Edit. Off by default.",
 
   // ── Settings: saving ──────────────────────────────────────────────────────
   "settings.unsaved": "Unsaved changes — scans use saved settings only",
@@ -435,6 +438,8 @@ export const en = {
   "scan.log.durationsSummary": "Durations: updated={updated} errors={errors}",
   "scan.log.doneWorks":
     "Done. works={found} new={added} skipped={skipped} tracks={tracks} meta={meta} errors={errors}",
+  "scan.log.doneManual": "  • {count} folders with no work id were added",
+  "scan.log.doneManual_one": "  • 1 folder with no work id was added",
   "scan.log.doneDurations":
     "Done. scanned={scanned} updated={updated} errors={errors}",
 } as const;
@@ -735,6 +740,9 @@ export const ja: Record<TranslationKey, string> = {
   "settings.paths.roots": "ライブラリのルート（1行に1パス）",
   "settings.paths.covers": "カバー画像のディレクトリ",
   "settings.paths.effective": "実際の値：",
+  "settings.paths.includeUnmatched": "作品IDのないフォルダーも取り込む",
+  "settings.paths.includeUnmatchedHint":
+    "RJ/VJ/BJ番号がなく音声ファイルを含むフォルダー（同人即売会の頒布物、バラの音源、DLsite以外で入手したものなど）を、フォルダー名をタイトルとした作品として登録します。情報の取得は行われないので、詳細は「編集」から手入力してください。既定はオフです。",
 
   // ── Settings: saving ──────────────────────────────────────────────────────
   "settings.unsaved": "未保存の変更があります — スキャンは保存済みの設定のみを使います",
@@ -868,6 +876,8 @@ export const ja: Record<TranslationKey, string> = {
   "scan.log.durationsSummary": "再生時間：更新={updated} エラー={errors}",
   "scan.log.doneWorks":
     "完了。作品={found} 新規={added} スキップ={skipped} トラック={tracks} メタ={meta} エラー={errors}",
+  "scan.log.doneManual": "  • 作品IDのないフォルダーを{count}件追加しました",
+  "scan.log.doneManual_one": "  • 作品IDのないフォルダーを1件追加しました",
   "scan.log.doneDurations":
     "完了。走査={scanned} 更新={updated} エラー={errors}",
 };

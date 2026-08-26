@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { listAllCirclesWithRecentWorks } from "@/lib/db/queries";
-import { coverSrc } from "@/lib/cover";
+import { coverSrc, hasCover } from "@/lib/cover";
+import { CoverPlaceholder } from "@/components/cover-placeholder";
 import { getTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -62,17 +63,21 @@ export default async function CirclesPage({
                         data-nsfw-cover={w.nsfw ? "true" : undefined}
                         className="relative overflow-hidden bg-muted"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={coverSrc({
-                            id: w.id,
-                            coverUrl: w.coverUrl,
-                            hasLocalCover: w.hasLocalCover,
-                          })}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
+                        {hasCover(w) ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={coverSrc({
+                              id: w.id,
+                              coverUrl: w.coverUrl,
+                              hasLocalCover: w.hasLocalCover,
+                            })}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <CoverPlaceholder />
+                        )}
                       </div>
                     );
                   })}

@@ -22,6 +22,17 @@ after(() => {
   cleanupTmp();
 });
 
+test("folders with no work id are left alone until asked for", () => {
+  // The default decides whether an upgrade changes anything, so it is pinned.
+  assert.equal(getSettings().includeUnmatchedFolders, false);
+
+  setSettings({ includeUnmatchedFolders: true });
+  assert.equal(getSettings().includeUnmatchedFolders, true);
+
+  setSettings({ includeUnmatchedFolders: false });
+  assert.equal(getSettings().includeUnmatchedFolders, false);
+});
+
 test("an unset rate limit falls back to the default, not to zero", () => {
   assert.equal(getSettings().dlsiteMinIntervalMs, DEFAULT_DLSITE_MIN_INTERVAL_MS);
   assert.equal(getDlsiteMinIntervalMs(), DEFAULT_DLSITE_MIN_INTERVAL_MS);
