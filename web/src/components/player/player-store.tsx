@@ -78,6 +78,47 @@ function audioUrl(trackId: number) {
 const PREARM_SECONDS = 30;
 
 /**
+ * The same window, for a page whose screen is off.
+ *
+ * An armed deck is loaded but paused, and a paused media element that has been
+ * idle for a while inside a hidden page is exactly what Chrome on Android
+ * suspends: it tears the pipeline down and has to rebuild it — over the network,
+ * on a radio in power save — when the handoff finally plays it. Arming closer to
+ * the boundary keeps that idle window short. It buys less head start, which is
+ * the trade: an armed deck that survives beats a longer buffer that doesn't.
+ */
+const PREARM_HIDDEN_SECONDS = 10;
+
+/**
+ * How far the handoff's fire time may drift from the current estimate before it
+ * is rescheduled. The first estimate is made from one `timeupdate` sample; if
+ * the stream then stalls, wall-clock time keeps running and an unmoved timer
+ * fires into the middle of a track, cutting it short and banking it as finished.
+ */
+const HANDOFF_DRIFT_MS = 500;
+
+/**
+ * Backoff between attempts to restart a deck that stalled or errored. Long
+ * enough at the top to ride out a phone that has parked its radio, and finite
+ * so a genuinely dead stream eventually says so instead of retrying forever.
+ *
+ * The first rung is deliberately unhurried. `waiting` is also what a healthy
+ * deck fires while it buffers the start of a track or lands a seek, so the
+ * ladder must not mistake a slow start for a stall — nothing is reloaded until
+ * the clock has failed to move for six seconds.
+ */
+const RECOVERY_DELAYS_MS = [2000, 4000, 8000, 15000, 15000];
+
+/** Backoff between attempts at a rejected `play()`. */
+const PLAY_RETRY_DELAYS_MS = [250, 750, 2000];
+
+/**
+ * How long the outgoing deck is kept intact after a handoff if the incoming one
+ * never reports `playing`. Only a backstop; the event normally gets there first.
+ */
+const TEARDOWN_FALLBACK_MS = 5000;
+
+/**
  * Hand over this far before the end rather than waiting for `ended`.
  *
  * This is the whole point of the two-deck design. While audio is playing the
@@ -143,8 +184,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /** Whether the standby deck has reported metadata, so its start is settled. */
   const armedReadyRef = useRef(false);
   const handoffTimerRef = useRef<number | null>(null);
-  /** Track id whose load we have already retried once after an error. */
-  const errorRetryRef = useRef<number | null>(null);
+  /** Wall-clock deadline the pending handoff timer was scheduled for. */
+  const handoffAtRef = useRef(0);
+  // The stall/error recovery ladder. `recoverPosRef` is the position the deck
+  // sat at when the watchdog was armed, which is how a rung tells "still stuck"
+  // from "it sorted itself out while we waited".
+  const recoverAttemptsRef = useRef(0);
+  const recoverTimerRef = useRef<number | null>(null);
+  const recoverPosRef = useRef(0);
+
+  /** The deferred release of an outgoing deck, waiting on its replacement. */
+  const teardownRef = useRef<{
+    incoming: HTMLAudioElement;
+    release: () => void;
+  } | null>(null);
+  const teardownTimerRef = useRef<number | null>(null);
+  /** The per-track progress flush, reachable from the mount-once handlers. */
+  const flushRef = useRef<(useBeacon?: boolean) => void>(() => {});
   /** Track ids the server has confirmed are gone from disk, this session. */
   const goneIdsRef = useRef<Set<number>>(new Set());
   /** Consecutive missing tracks, reset by anything that actually plays. */
@@ -163,19 +219,32 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return activeIsARef.current ? deckBRef.current : deckARef.current;
   }
 
+  /**
+   * POST a position, and report whether it actually landed.
+   *
+   * The rejection matters as much as the write: an unauthenticated POST is
+   * *redirected* to /login by the session proxy rather than refused, so `fetch`
+   * follows it and hands back a perfectly good 200 of HTML. Left unchecked that
+   * reads as a successful save. Left uncaught it is an unhandled rejection.
+   */
+  function postProgress(body: string): Promise<boolean> {
+    return fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    })
+      .then((res) => res.ok && !res.redirected)
+      .catch(() => false);
+  }
+
   function saveProgressFor(
     trackId: number,
     positionSeconds: number,
     completed = false,
   ) {
     sessionPosRef.current.set(trackId, positionSeconds);
-    const body = JSON.stringify({ trackId, positionSeconds, completed });
-    void fetch("/api/progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      keepalive: true,
-    });
+    void postProgress(JSON.stringify({ trackId, positionSeconds, completed }));
   }
 
   /**
@@ -237,23 +306,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /**
    * `play()` rejections used to be swallowed, which is how a failed advance
    * could look like "autoplay just doesn't work" with nothing in the console.
-   * Log the reason and give it one retry — a deck that Chrome suspended while
-   * the page was hidden will usually take the second call.
+   * Log the reason and walk the retry ladder — a deck Chrome suspended while the
+   * page was hidden often refuses the first call and takes a later one, and on a
+   * phone that has just woken its radio the gap can be seconds rather than
+   * milliseconds.
    */
-  function playDeck(el: HTMLAudioElement, allowRetry = true) {
+  function playDeck(el: HTMLAudioElement, attempt = 0) {
     const promise = el.play();
     if (!promise) return;
     promise.catch((err: unknown) => {
       if (el !== audioRef.current) return;
       const name = err instanceof Error ? err.name : "unknown";
       console.warn(`[player] play() rejected: ${name}`, err);
-      if (allowRetry) {
-        window.setTimeout(() => {
-          if (el === audioRef.current) playDeck(el, false);
-        }, 250);
+      const delay = PLAY_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) {
+        setIsPlaying(false);
         return;
       }
-      setIsPlaying(false);
+      window.setTimeout(() => {
+        if (el === audioRef.current) playDeck(el, attempt + 1);
+      }, delay);
     });
   }
 
@@ -290,6 +362,129 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(handoffTimerRef.current);
       handoffTimerRef.current = null;
     }
+    handoffAtRef.current = 0;
+  }
+
+  function clearRecovery() {
+    if (recoverTimerRef.current !== null) {
+      clearTimeout(recoverTimerRef.current);
+      recoverTimerRef.current = null;
+    }
+  }
+
+  /** Playback is moving again: forget the ladder so the next stall starts fresh. */
+  function resetRecovery() {
+    clearRecovery();
+    recoverAttemptsRef.current = 0;
+  }
+
+  /**
+   * Arm the watchdog for the active deck, or give up if the ladder is spent.
+   *
+   * This is what makes a background stall survivable. A phone that drops its
+   * radio when the screen goes off leaves the deck out of data with no event to
+   * say it will ever come back, and the old behaviour — one retry, then
+   * `setIsPlaying(false)` — turned a momentary blip into a dead player.
+   */
+  function scheduleRecovery(el: HTMLAudioElement) {
+    if (el !== audioRef.current) return;
+    if (recoverTimerRef.current !== null) return;
+    const delay = RECOVERY_DELAYS_MS[recoverAttemptsRef.current];
+    if (delay === undefined) {
+      resetRecovery();
+      // Pause rather than leave a stuck deck claiming to play: the state the
+      // media notification shows should be one the user can act on.
+      el.pause();
+      setIsPlaying(false);
+      toast.error(tRef.current("player.playbackStalled"));
+      return;
+    }
+    recoverPosRef.current = el.currentTime;
+    recoverTimerRef.current = window.setTimeout(() => {
+      recoverTimerRef.current = null;
+      runRecovery(el);
+    }, delay);
+  }
+
+  /**
+   * One rung. A bare `play()` first — that alone revives a deck Chrome merely
+   * suspended — and a full reload from the last known position after that, which
+   * is what a connection that actually died needs.
+   */
+  function runRecovery(el: HTMLAudioElement) {
+    if (el !== audioRef.current) return;
+    if (el.currentTime > recoverPosRef.current + 0.25) {
+      // It sorted itself out while we waited.
+      resetRecovery();
+      return;
+    }
+    const attempt = recoverAttemptsRef.current;
+    recoverAttemptsRef.current = attempt + 1;
+    const at = el.currentTime || pendingStartRef.current || 0;
+    // Reloading a deck that is genuinely still fetching would throw away the
+    // buffer it is in the middle of filling, so hold off while it says it is
+    // loading and carries no error — but not forever, since a socket that died
+    // under a suspended tab can keep claiming to load.
+    const givenUp =
+      el.error !== null || el.networkState !== HTMLMediaElement.NETWORK_LOADING;
+    const reload = attempt > 0 && (givenUp || attempt > 1);
+    console.warn(
+      `[player] restarting stalled playback, attempt ${attempt + 1}` +
+        `${reload ? " (reload)" : ""}`,
+    );
+    try {
+      if (reload) {
+        el.load();
+        if (at > 0) el.currentTime = at;
+      }
+      playDeck(el);
+    } catch {}
+    // Arm the next rung; `playing`, or a clock that moves, stands it down.
+    scheduleRecovery(el);
+  }
+
+  function cancelTeardown() {
+    if (teardownTimerRef.current !== null) {
+      clearTimeout(teardownTimerRef.current);
+      teardownTimerRef.current = null;
+    }
+    const pending = teardownRef.current;
+    teardownRef.current = null;
+    pending?.incoming.removeEventListener("playing", pending.release);
+  }
+
+  /**
+   * Release the outgoing deck — but not until its replacement is audibly playing.
+   *
+   * Doing it in the same task as the swap leaves a window in which the page owns
+   * no live media player at all, because the incoming deck does not count until
+   * it actually starts. Chrome reports that window to Android as "nothing is
+   * playing": audio focus is dropped and the media notification is rebuilt. On a
+   * phone with the screen off that is precisely the moment a battery manager
+   * decides the tab is finished with.
+   */
+  function scheduleTeardown(prev: HTMLAudioElement, incoming: HTMLAudioElement) {
+    // A swap landing on top of a pending teardown means that teardown's deck is
+    // now the standby, and releasing it is no longer this path's business.
+    cancelTeardown();
+
+    const release = () => {
+      if (teardownRef.current?.release !== release) return;
+      cancelTeardown();
+      // Whatever took this deck over in the meantime owns it now.
+      if (prev === audioRef.current) return;
+      if (armedIdRef.current !== null) return;
+      try {
+        prev.pause();
+        prev.removeAttribute("src");
+        prev.preload = "none";
+        prev.load();
+      } catch {}
+    };
+
+    teardownRef.current = { incoming, release };
+    incoming.addEventListener("playing", release, { once: true });
+    teardownTimerRef.current = window.setTimeout(release, TEARDOWN_FALLBACK_MS);
   }
 
   /** Forget whatever the standby deck holds and release its buffer. */
@@ -324,12 +519,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (startAt > 0) el.currentTime = startAt;
   }
 
+  /**
+   * Re-anchored on every tick rather than fixed by the first one. The original
+   * estimate came from a single `timeupdate` sample; if the stream then stalls,
+   * or the phone suspends the tab for a stretch, wall-clock time runs on and an
+   * unmoved timer hands off in the middle of a track — which also banks it as
+   * finished. Rescheduling on drift keeps the swap tied to the audio clock.
+   */
   function scheduleHandoff(remaining: number) {
-    if (handoffTimerRef.current !== null) return;
     if (indexRef.current + 1 >= queueRef.current.length) return;
     const delay = Math.max(0, (remaining - HANDOFF_LEAD_SECONDS) * 1000);
+    const deadline = performance.now() + delay;
+    if (handoffTimerRef.current !== null) {
+      if (Math.abs(deadline - handoffAtRef.current) < HANDOFF_DRIFT_MS) return;
+      clearHandoff();
+    }
+    handoffAtRef.current = deadline;
     handoffTimerRef.current = window.setTimeout(() => {
       handoffTimerRef.current = null;
+      handoffAtRef.current = 0;
       advance();
     }, delay);
   }
@@ -346,6 +554,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
    */
   function advance(atBoundary = true) {
     clearHandoff();
+    resetRecovery();
     const nextIndex = indexRef.current + 1;
     const nextTrack = queueRef.current[nextIndex];
     const prev = audioRef.current;
@@ -397,12 +606,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     armedIdRef.current = null;
     armedStartRef.current = 0;
     armedReadyRef.current = false;
-    errorRetryRef.current = null;
 
     // Pause before playing, in the same synchronous block: iOS will not keep two
     // elements playing at once, and there is no gap to worry about within one task.
     if (prev) prev.pause();
-    target.preload = "metadata";
+    // `preload` stays where `armStandby` left it. Downgrading here shrank
+    // Chrome's forward buffer at the one moment the deck needed it most.
     target.volume = volumeRef.current;
     playDeck(target);
 
@@ -411,15 +620,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setMediaMetadata(nextTrack);
     syncPositionState(target);
 
-    // Release the outgoing deck's buffer; it becomes the standby for the track
-    // after this one.
-    if (prev) {
-      try {
-        prev.removeAttribute("src");
-        prev.preload = "none";
-        prev.load();
-      } catch {}
-    }
+    // The outgoing deck becomes the standby for the track after this one, but it
+    // is not released until the incoming one is really playing.
+    if (prev) scheduleTeardown(prev, target);
+
+    // A deck promoted without ever having reported metadata may hold nothing at
+    // all — the usual way a hidden page's armed deck gets suspended before it
+    // finished loading. Watch it from the start rather than waiting for a
+    // `waiting` event that a dead deck will never fire.
+    if (!settled) scheduleRecovery(target);
 
     setCurrentIndex(nextIndex);
     setIsPlaying(true);
@@ -436,6 +645,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
     disarmStandby();
+    resetRecovery();
     if (loadedIdRef.current !== track.id) {
       // Flush the outgoing track's most recent position before swapping src,
       // since changing src clears currentTime.
@@ -450,14 +660,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
       endedIdRef.current = null;
       const startAt = startPositionFor(track);
-      audio.preload = "metadata";
+      // This element is played on the way out of here, so let it buffer.
+      audio.preload = "auto";
       audio.muted = false;
       audio.src = audioUrl(track.id);
       audio.currentTime = startAt;
       loadedIdRef.current = track.id;
       lastSavedRef.current = startAt;
       pendingStartRef.current = startAt;
-      errorRetryRef.current = null;
       setCurrentTime(startAt);
       setDuration(track.durationSeconds ?? 0);
     }
@@ -571,12 +781,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     function onTimeUpdate(this: HTMLAudioElement) {
       if (!isActive(this)) return;
+      // A clock that moves is the only proof of health that doesn't depend on an
+      // event arriving, so it is what stands the recovery ladder down.
+      if (
+        (recoverAttemptsRef.current > 0 || recoverTimerRef.current !== null) &&
+        this.currentTime > recoverPosRef.current + 0.25
+      ) {
+        resetRecovery();
+      }
       if (!hiddenRef.current) setCurrentTime(this.currentTime);
       syncPositionState(this);
       const d = this.duration;
       if (!Number.isFinite(d) || d <= 0) return;
       const remaining = d - this.currentTime;
-      if (remaining > PREARM_SECONDS) return;
+      const prearm = hiddenRef.current ? PREARM_HIDDEN_SECONDS : PREARM_SECONDS;
+      if (remaining > prearm) return;
       const upcoming = queueRef.current[indexRef.current + 1];
       if (upcoming) armStandby(upcoming);
       scheduleHandoff(remaining);
@@ -614,7 +833,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // Playing again means the track is no longer parked on the finished state
       // the advance persisted, so a later flush should record wherever it gets to.
       endedIdRef.current = null;
-      errorRetryRef.current = null;
       goneStreakRef.current = 0;
       setIsPlaying(true);
     }
@@ -624,6 +842,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // A paused track must not be handed off by a timer armed while it played.
       clearHandoff();
       setIsPlaying(false);
+    }
+
+    /**
+     * The deck has run out of data. On a phone with the screen off this is the
+     * shape a dropped connection takes, and it does not reliably heal on its
+     * own — `waiting` can be the last thing a deck ever says.
+     */
+    function onStall(this: HTMLAudioElement) {
+      if (!isActive(this)) return;
+      if (this.paused) return;
+      // The handoff estimate was made against a clock that has now stopped.
+      clearHandoff();
+      scheduleRecovery(this);
+    }
+
+    function onPlaying(this: HTMLAudioElement) {
+      if (!isActive(this)) return;
+      resetRecovery();
+      setIsPlaying(true);
     }
 
     function onEnded(this: HTMLAudioElement) {
@@ -664,19 +901,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             handleGone(id);
             return;
           }
-          if (errorRetryRef.current === id) {
-            setIsPlaying(false);
-            return;
-          }
-          errorRetryRef.current = id;
-          const at = deck.currentTime || pendingStartRef.current || 0;
-          try {
-            deck.load();
-            if (at > 0) deck.currentTime = at;
-            playDeck(deck, false);
-          } catch {
-            setIsPlaying(false);
-          }
+          // The file is there, so this was the connection. Hand it to the same
+          // ladder a stall uses rather than spending the one retry this used to
+          // get — a phone whose radio is asleep needs more than one go. Start at
+          // the second rung: an element carrying a `MediaError` will not take a
+          // bare `play()`, it has to be reloaded.
+          if (recoverAttemptsRef.current === 0) recoverAttemptsRef.current = 1;
+          scheduleRecovery(deck);
         });
     }
 
@@ -709,11 +940,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!hasNext) setIsPlaying(false);
     }
 
+    // `suspend` is deliberately absent: Chrome fires it whenever it stops
+    // fetching because the buffer is full, which is the healthy case, and
+    // treating it as trouble would have the ladder reloading a deck that is
+    // playing perfectly well.
     const events: Array<[string, EventListener]> = [
       ["timeupdate", onTimeUpdate as EventListener],
       ["loadedmetadata", onLoadedMetadata as EventListener],
       ["play", onPlay as EventListener],
+      ["playing", onPlaying as EventListener],
       ["pause", onPause as EventListener],
+      ["waiting", onStall as EventListener],
+      ["stalled", onStall as EventListener],
       ["ended", onEnded as EventListener],
       ["error", onError as EventListener],
     ];
@@ -784,23 +1022,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (audioRef.current?.ended) return;
       const t = audioRef.current?.currentTime ?? 0;
       if (t === lastSavedRef.current) return;
+      const previous = lastSavedRef.current;
       lastSavedRef.current = t;
       sessionPosRef.current.set(trackId, t);
       const body = JSON.stringify({ trackId, positionSeconds: t });
       if (useBeacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
         try {
           const blob = new Blob([body], { type: "application/json" });
-          navigator.sendBeacon("/api/progress", blob);
-          return;
+          // `false` means the queue is full — fall through to the fetch rather
+          // than believing a write that never left.
+          if (navigator.sendBeacon("/api/progress", blob)) return;
         } catch {}
       }
-      void fetch("/api/progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        keepalive: true,
+      void postProgress(body).then((ok) => {
+        // Put the marker back so the next tick tries again, unless something
+        // has banked a newer position in the meantime.
+        if (!ok && lastSavedRef.current === t) lastSavedRef.current = previous;
       });
     }
+    flushRef.current = saveNow;
 
     const interval = setInterval(() => {
       const t = audioRef.current?.currentTime ?? 0;
@@ -813,10 +1053,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const onPageHide = () => saveNow(true);
     window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      clearInterval(interval);
+      for (const deck of decks) deck?.removeEventListener("pause", onPause);
+      window.removeEventListener("pagehide", onPageHide);
+      // Track-switch flushes already happened in loadIntoActive; only save here
+      // if a deck still holds this trackId (e.g. provider unmount).
+      if (loadedIdRef.current === trackId) saveNow(true);
+    };
+  }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Visibility is owned here rather than by the effect above, which bails when
+  // the queue is empty. `hiddenRef` gates both the render freeze and how early
+  // the standby deck is armed, so it has to stay true to the page for as long as
+  // the provider is mounted — not just while something is loaded.
+  useEffect(() => {
+    hiddenRef.current = document.visibilityState === "hidden";
     const onVisibility = () => {
       hiddenRef.current = document.visibilityState === "hidden";
       if (hiddenRef.current) {
-        saveNow(true);
+        flushRef.current(true);
         return;
       }
       // Back on screen: the UI has been frozen since the screen went off, and
@@ -830,21 +1087,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setIsPlaying(!audio.paused);
     };
     document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      clearInterval(interval);
-      for (const deck of decks) deck?.removeEventListener("pause", onPause);
-      window.removeEventListener("pagehide", onPageHide);
-      document.removeEventListener("visibilitychange", onVisibility);
-      // Track-switch flushes already happened in loadIntoActive; only save here
-      // if a deck still holds this trackId (e.g. provider unmount).
-      if (loadedIdRef.current === trackId) saveNow(true);
-    };
-  }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => {
     return () => {
       clearHandoff();
+      clearRecovery();
+      cancelTeardown();
     };
   }, []);
 

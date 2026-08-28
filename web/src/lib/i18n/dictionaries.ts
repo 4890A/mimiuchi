@@ -182,6 +182,7 @@ export const en = {
   "player.seekPosition": "{current} of {total}",
   "player.trackMissing": "“{title}” is no longer on disk — skipped",
   "player.manyMissing": "{count} tracks in this queue are no longer on disk. Re-scan to tidy them up.",
+  "player.playbackStalled": "Playback stopped — the connection didn’t come back. Press play to try again.",
 
   // ── Edit work dialog ──────────────────────────────────────────────────────
   "edit.trigger": "Edit work",
@@ -629,6 +630,7 @@ export const ja: Record<TranslationKey, string> = {
   "player.seekPosition": "{total} 中 {current}",
   "player.trackMissing": "「{title}」はディスク上にありません。スキップしました",
   "player.manyMissing": "このキューの{count}件のファイルがディスク上にありません。再スキャンで整理できます。",
+  "player.playbackStalled": "接続が戻らず再生が停止しました。再生ボタンでやり直せます。",
 
   // ── Edit work dialog ──────────────────────────────────────────────────────
   "edit.trigger": "作品を編集",
