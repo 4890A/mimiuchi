@@ -2,6 +2,7 @@ import "server-only";
 import MiniSearch from "minisearch";
 import { sqlite } from "../db/client";
 import { phoneticForms } from "./transliterate";
+import { isWorkCodeQuery, workCodeForms } from "./work-code";
 
 export type SuggestionType = "seiyuu" | "circle" | "tag" | "work";
 
@@ -18,6 +19,8 @@ export interface IndexedDoc {
   romaji?: string;
   /** Auxiliary searchable text (e.g. circle name for a work). */
   context?: string;
+  /** For a work, the searchable forms of its id. See `workCodeForms`. */
+  code?: string;
   /** Used for ranking ties (more works = more likely). */
   workCount: number;
   /** For seiyuu/circle/tag: pre-resolved work IDs that match this entity.
@@ -57,7 +60,7 @@ function tokenize(text: string): string[] {
 function createIndex(): MiniSearch<IndexedDoc> {
   return new MiniSearch<IndexedDoc>({
     idField: "id",
-    fields: ["name", "nameEn", "hiragana", "romaji", "context"],
+    fields: ["name", "nameEn", "hiragana", "romaji", "context", "code"],
     storeFields: ["type", "refId", "name", "nameEn", "context", "workCount"],
     tokenize,
     processTerm: (term) => term.toLowerCase(),
@@ -147,6 +150,9 @@ async function build(): Promise<BuildResult> {
             hiragana: phon.hiragana,
             romaji: phon.romaji,
             context: r.context,
+            // Only a work has an id anyone would type; the others are numeric
+            // primary keys the user never sees.
+            code: type === "work" ? workCodeForms(refId) : undefined,
             workCount: r.work_count,
             workIds:
               type !== "work" && r.work_ids
@@ -203,6 +209,54 @@ const TYPE_WEIGHTS: Record<SuggestionType, number> = {
   work: 1.0,
 };
 
+/**
+ * Per-field boosts. `code` outranks everything: an id is typed when the user
+ * already knows which work they want, and it has to beat the type weighting
+ * that otherwise puts works below seiyuu, circles and tags.
+ */
+const FIELD_BOOSTS = {
+  code: 8,
+  name: 3,
+  hiragana: 2.5,
+  romaji: 2,
+  nameEn: 2,
+  context: 0.5,
+};
+
+/**
+ * Run a query's variants over the index and keep each document's best hit.
+ *
+ * Both public entry points want the same matching and differ only in what they
+ * do with the results, so the matching rules — variants, prefixes, when to fuzz
+ * — live here rather than being kept in step by hand in two places.
+ */
+function rankDocs(
+  index: MiniSearch<IndexedDoc>,
+  docs: Map<string, IndexedDoc>,
+  q: { raw: string; hiragana?: string; romaji?: string },
+): Array<{ doc: IndexedDoc; score: number }> {
+  const variants = new Set<string>([q.raw]);
+  if (q.romaji && q.romaji !== q.raw) variants.add(q.romaji);
+  if (q.hiragana) variants.add(q.hiragana);
+
+  // A work id is looked up, not guessed at. Ids in a library sit a digit or two
+  // apart, so fuzzy matching answers `RJ01678210` with every neighbour within
+  // three edits of it and the work actually asked for is lost in the middle.
+  const fuzzy = isWorkCodeQuery(q.raw) ? false : 0.3;
+
+  const best = new Map<string, { doc: IndexedDoc; score: number }>();
+  for (const v of variants) {
+    const hits = index.search(v, { prefix: true, fuzzy, boost: FIELD_BOOSTS });
+    for (const h of hits) {
+      const doc = docs.get(String(h.id));
+      if (!doc) continue;
+      const prev = best.get(doc.id);
+      if (!prev || h.score > prev.score) best.set(doc.id, { doc, score: h.score });
+    }
+  }
+  return [...best.values()];
+}
+
 export interface Suggestion {
   type: SuggestionType;
   id: string;
@@ -224,33 +278,12 @@ export async function searchSuggestions(
   const { index, docs } = await getSearchIndex();
   const typeFilter = opts.type;
 
-  // Build a multi-term query: original + romaji + hiragana variants.
-  // MiniSearch's search() accepts a string; we run multiple searches and merge.
-  const variants = new Set<string>();
-  variants.add(q.raw);
-  if (q.romaji && q.romaji !== q.raw) variants.add(q.romaji);
-  if (q.hiragana) variants.add(q.hiragana);
-
-  const merged = new Map<string, { doc: IndexedDoc; score: number }>();
-  for (const v of variants) {
-    const hits = index.search(v, {
-      prefix: true,
-      fuzzy: 0.3,
-      boost: { name: 3, hiragana: 2.5, romaji: 2, nameEn: 2, context: 0.5 },
-    });
-    for (const h of hits) {
-      const doc = docs.get(String(h.id));
-      if (!doc) continue;
-      if (typeFilter && doc.type !== typeFilter) continue;
-      const weighted = typeFilter ? h.score : h.score * TYPE_WEIGHTS[doc.type];
-      const prev = merged.get(doc.id);
-      if (!prev || weighted > prev.score) {
-        merged.set(doc.id, { doc, score: weighted });
-      }
-    }
-  }
-
-  return Array.from(merged.values())
+  return rankDocs(index, docs, q)
+    .filter(({ doc }) => !typeFilter || doc.type === typeFilter)
+    .map(({ doc, score }) => ({
+      doc,
+      score: typeFilter ? score : score * TYPE_WEIGHTS[doc.type],
+    }))
     .sort((a, b) => b.score - a.score || b.doc.workCount - a.doc.workCount)
     .slice(0, limit)
     .map(({ doc, score }) => ({
@@ -278,32 +311,18 @@ export async function searchWorkIdsForQuery(
 
   const { index, docs } = await getSearchIndex();
 
-  const variants = new Set<string>();
-  variants.add(q.raw);
-  if (q.romaji && q.romaji !== q.raw) variants.add(q.romaji);
-  if (q.hiragana) variants.add(q.hiragana);
-
   // workId -> best score seen so far
   const workScore = new Map<string, number>();
 
-  for (const v of variants) {
-    const hits = index.search(v, {
-      prefix: true,
-      fuzzy: 0.3,
-      boost: { name: 3, hiragana: 2.5, romaji: 2, nameEn: 2, context: 0.5 },
-    });
-    for (const h of hits) {
-      const doc = docs.get(String(h.id));
-      if (!doc) continue;
-      const weighted = h.score * TYPE_WEIGHTS[doc.type];
-      if (doc.type === "work") {
-        const prev = workScore.get(doc.refId) ?? -Infinity;
-        if (weighted > prev) workScore.set(doc.refId, weighted);
-      } else if (doc.workIds) {
-        for (const wid of doc.workIds) {
-          const prev = workScore.get(wid) ?? -Infinity;
-          if (weighted > prev) workScore.set(wid, weighted);
-        }
+  for (const { doc, score } of rankDocs(index, docs, q)) {
+    const weighted = score * TYPE_WEIGHTS[doc.type];
+    if (doc.type === "work") {
+      const prev = workScore.get(doc.refId) ?? -Infinity;
+      if (weighted > prev) workScore.set(doc.refId, weighted);
+    } else if (doc.workIds) {
+      for (const wid of doc.workIds) {
+        const prev = workScore.get(wid) ?? -Infinity;
+        if (weighted > prev) workScore.set(wid, weighted);
       }
     }
   }
