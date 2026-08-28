@@ -210,7 +210,16 @@ export function SearchBar() {
       <CommandPrimitive shouldFilter={false} loop label={t("common.search")}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <CommandPrimitive.Input asChild value={q} onValueChange={setQ}>
+          <CommandPrimitive.Input
+            asChild
+            value={q}
+            // Typing reopens a list that Escape closed. `onFocus` cannot do it:
+            // Escape leaves the box focused, so there is no second focus event.
+            onValueChange={(v) => {
+              setQ(v);
+              setOpen(true);
+            }}
+          >
             <Input
               ref={inputRef}
               suppressHydrationWarning
@@ -247,8 +256,12 @@ export function SearchBar() {
                     submitFreeText();
                   }
                 } else if (e.key === "Escape") {
+                  // Close the list but keep the caret where it is, the way a
+                  // combobox is expected to behave. Blurring here also made the
+                  // next Enter ambiguous: refocusing the box fires `onFocus`,
+                  // which reopens the list, and Enter then picked the
+                  // highlighted suggestion instead of submitting what was typed.
                   setOpen(false);
-                  inputRef.current?.blur();
                 }
               }}
             />
