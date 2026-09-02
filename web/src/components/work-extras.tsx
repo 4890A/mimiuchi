@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   ChevronLeft,
@@ -151,6 +151,14 @@ export function WorkExtras({
     return [...groups.entries()];
   }, [images]);
 
+  // What the lightbox steps through: every image in the work, in the order the
+  // grid lays them out. Grouping by folder reorders anything that interleaves
+  // two folders, so paging through `images` itself would jump around.
+  const ordered = useMemo(
+    () => imageFolders.flatMap(([, list]) => list),
+    [imageFolders],
+  );
+
   if (assets.length === 0) return null;
 
   const openScript = (a: WorkAssetView) => {
@@ -216,7 +224,7 @@ export function WorkExtras({
                       // attribute and reveals on hover/focus.
                       data-nsfw-cover={nsfw ? "true" : undefined}
                       onClick={() =>
-                        setLightbox(images.findIndex((i) => i.id === img.id))
+                        setLightbox(ordered.findIndex((i) => i.id === img.id))
                       }
                       title={img.title}
                       className="block cursor-zoom-in overflow-hidden rounded-md border bg-muted/30 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -289,7 +297,7 @@ export function WorkExtras({
       </div>
 
       <ImageLightbox
-        images={images}
+        images={ordered}
         index={lightbox}
         onIndex={setLightbox}
         onClose={() => setLightbox(null)}
@@ -327,8 +335,12 @@ export function WorkExtras({
 }
 
 /**
- * Full-size viewer with prev/next, extending the single-image pattern
- * `CoverLightbox` established.
+ * Full-size viewer over every image in the work, not just the folder whose
+ * thumbnail was clicked — `images` is already the flat de-duplicated list and
+ * the grid hands over an index into it.
+ *
+ * Three ways through it: the arrow buttons, a wheel or trackpad scroll on
+ * desktop, and a horizontal swipe on touch.
  */
 function ImageLightbox({
   images,
@@ -343,17 +355,138 @@ function ImageLightbox({
 }) {
   const { t } = useTranslations();
   const current = index === null ? null : (images[index] ?? null);
+  const open = index !== null;
+  // The popup element is held in state, not a ref: the wheel listener has to be
+  // attached the moment it mounts, and a ref would not re-run the effect.
+  const [popupEl, setPopupEl] = useState<HTMLDivElement | null>(null);
 
-  const step = (delta: number) => {
-    if (index === null) return;
-    onIndex((index + delta + images.length) % images.length);
+  // The wheel listener is attached once per opening and must not be rebuilt on
+  // every step, or the cooldown below would be discarded exactly when it is
+  // needed. So the current index reaches it through a ref, not a closure.
+  const indexRef = useRef(index);
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
+
+  const step = useCallback(
+    (delta: number) => {
+      const i = indexRef.current;
+      if (i === null || images.length < 2) return;
+      onIndex((i + delta + images.length) % images.length);
+    },
+    [images.length, onIndex],
+  );
+
+  /**
+   * Scroll, for desktop. A mouse notch arrives as a single event, but a
+   * trackpad flick arrives as a stream with a long momentum tail, and one image
+   * per event would fly through the whole gallery. So deltas accumulate to a
+   * threshold, a step opens a short window that swallows the tail, and a pause
+   * between events starts a fresh gesture.
+   */
+  useEffect(() => {
+    const el = popupEl;
+    if (!open || !el || images.length < 2) return;
+    let acc = 0;
+    let last = 0;
+    let until = 0;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const now = e.timeStamp;
+      if (now < until) return;
+      if (now - last > 200) acc = 0;
+      last = now;
+      acc += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (Math.abs(acc) < 50) return;
+      step(acc > 0 ? 1 : -1);
+      acc = 0;
+      until = now + 350;
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, popupEl, images.length, step]);
+
+  // Moving on should not stall on a cold fetch, so the two neighbours are
+  // warmed once an image is up. These are the full-resolution originals, so
+  // only the two adjacent to what is already open are ever pulled.
+  useEffect(() => {
+    if (index === null || images.length < 2) return;
+    const ids = new Set([
+      images[(index + 1) % images.length].id,
+      images[(index - 1 + images.length) % images.length].id,
+    ]);
+    for (const id of ids) new Image().src = `/api/asset/${id}`;
+  }, [index, images]);
+
+  // Swipe, for touch. `drag` follows the finger so the image moves with it. The
+  // axis locks on the first real movement, leaving a vertical drag or a pinch
+  // to the browser.
+  const [drag, setDrag] = useState(0);
+  const touch = useRef<{ x: number; y: number; axis: "x" | "y" | null } | null>(
+    null,
+  );
+  // A completed swipe still ends in a click, which the full-bleed Close overlay
+  // below would read as "dismiss". This eats that one click.
+  const swiped = useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    swiped.current = false;
+    if (e.touches.length !== 1 || images.length < 2) return;
+    touch.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      axis: null,
+    };
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const start = touch.current;
+    if (!start) return;
+    if (e.touches.length !== 1) {
+      touch.current = null;
+      setDrag(0);
+      return;
+    }
+    const dx = e.touches[0].clientX - start.x;
+    const dy = e.touches[0].clientY - start.y;
+    if (start.axis === null) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (start.axis === "x") setDrag(dx);
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    setDrag(0);
+    if (!start || start.axis !== "x") return;
+    const dx = (e.changedTouches[0]?.clientX ?? start.x) - start.x;
+    if (Math.abs(dx) < 60) return;
+    swiped.current = true;
+    step(dx < 0 ? 1 : -1);
   };
 
   return (
-    <Dialog open={index !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogPortal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/85 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
-        <DialogPrimitive.Popup className="fixed inset-0 z-50 flex items-center justify-center p-4 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0">
+        <DialogPrimitive.Popup
+          ref={setPopupEl}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+          onClickCapture={(e) => {
+            if (!swiped.current) return;
+            swiped.current = false;
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          // `touch-pan-y` claims horizontal gestures for the swipe and leaves
+          // vertical panning and pinch-zoom to the browser.
+          className="fixed inset-0 z-50 flex touch-pan-y items-center justify-center p-4 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0"
+        >
           {/* Fills the viewport so the backdrop stays clickable through the
               padding; the image below is pointer-events-none so it does not
               swallow that click. */}
@@ -366,12 +499,22 @@ function ImageLightbox({
           </DialogPrimitive.Title>
 
           {current && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={`/api/asset/${current.id}`}
-              alt={current.title}
-              className="pointer-events-none relative max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
-            />
+            <div
+              className="pointer-events-none relative transition-transform duration-200"
+              // No transition while the finger is down, so the image tracks it
+              // exactly; letting go animates the offset back to zero.
+              style={{
+                transform: drag ? `translateX(${drag}px)` : undefined,
+                transition: drag ? "none" : undefined,
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/asset/${current.id}`}
+                alt={current.title}
+                className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+              />
+            </div>
           )}
 
           {images.length > 1 && (
