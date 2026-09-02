@@ -239,7 +239,12 @@ export function ScriptReaderProvider({
               padded card — the reader needs the whole viewport above the bar. */}
           {/* No bottom border: the popup stops exactly where the player bar
               starts, and the bar draws its own `border-t` there already. */}
-          <DialogPrimitive.Popup className="fixed inset-x-0 top-0 bottom-[var(--player-bar-height,0px)] z-50 flex flex-col bg-background duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+          {/* z-45 — under the player bar (z-50), over the top nav (z-40). The
+              bar stays usable here, so anything it opens upwards (the volume
+              slider, the seek tooltip) has to land over the reader rather than
+              behind it; at a matching z-50 the portal's later DOM order would
+              win and clip the flyout. */}
+          <DialogPrimitive.Popup className="fixed inset-x-0 top-0 bottom-[var(--player-bar-height,0px)] z-45 flex flex-col bg-background duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
             <DialogPrimitive.Title className="sr-only">
               {current?.title ?? ""}
             </DialogPrimitive.Title>
