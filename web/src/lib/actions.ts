@@ -465,6 +465,11 @@ export async function removeMissingWorks(): Promise<
 export async function revealWorkFolder(
   workId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Inside a container there is no desktop to hand the path to, and the path
+  // would be the container's mount point anyway. The Dockerfile sets this.
+  if (process.env.KIKOERU_IN_CONTAINER) {
+    return { ok: false, error: "not available when running in Docker" };
+  }
   const row = db
     .select({ folderPath: works.folderPath, isArchive: works.isArchive })
     .from(works)

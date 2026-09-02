@@ -1,0 +1,49 @@
+# Optional Docker deployment. Running with node/pnpm (see README) needs none
+# of this. Copy .env.docker.example to .env next to this file and edit it.
+services:
+  app:
+    build: .
+    image: mimiuchi:local
+    restart: unless-stopped
+    # tini as PID 1: reaps ffmpeg children and forwards SIGTERM cleanly.
+    init: true
+    ports:
+      - "${MIMIUCHI_PORT:-3000}:3000"
+    environment:
+      KIKOERU_PASSWORD: ${KIKOERU_PASSWORD:-changeme}
+      # Empty = unset: a secret is generated on first run and kept in /data.
+      KIKOERU_SESSION_SECRET: ${KIKOERU_SESSION_SECRET:-}
+      # `next start` runs with NODE_ENV=production, which marks the login
+      # cookie Secure; browsers then drop it over plain http://<lan-ip>:3000.
+      # Leave false unless you serve the app through an HTTPS reverse proxy.
+      KIKOERU_SECURE_COOKIES: ${KIKOERU_SECURE_COOKIES:-false}
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Your RJ-coded library. Read-only: the app never writes into it.
+      - "${MIMIUCHI_LIBRARY:?set MIMIUCHI_LIBRARY in .env}:/library:ro"
+      # SQLite (WAL), session secret, thumbnail + transcode caches.
+      # A named volume rather than a bind mount: SQLite's WAL locking is
+      # unreliable through Docker Desktop's file sharing. On a Linux host you
+      # may replace `data` with a host path.
+      - data:/data
+      # Downloaded cover art. Safe to bind-mount on any host if you prefer.
+      - covers:/covers
+    # Lets Settings -> DLsite proxy reach a proxy running on the host machine
+    # as http://host.docker.internal:<port> (Docker Desktop resolves this
+    # already; Linux needs the mapping).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  data:
+  covers:

@@ -27,5 +27,9 @@ export const config = {
   // default). A backup upload is far larger than that and would arrive
   // truncated. The route authenticates itself instead — see its own
   // `isAuthenticated()` check.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/backup/import).*)"],
+  // `/api/health` is exempt too: it is the container liveness probe and must
+  // answer 200 without a session.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/backup/import|api/health).*)",
+  ],
 };

@@ -227,7 +227,9 @@ export default async function WorkPage({
                   coverUrl: work.coverUrl,
                 }}
               />
-              <RevealFolderButton workId={work.id} isArchive={work.isArchive} />
+              {!process.env.KIKOERU_IN_CONTAINER && (
+                <RevealFolderButton workId={work.id} isArchive={work.isArchive} />
+              )}
               <DeleteWorkButton workId={work.id} workTitle={work.title} />
             </div>
             {work.description && (

@@ -1,0 +1,41 @@
+# VCS / tooling
+.git
+.claude
+**/.claude
+.playwright
+.playwright-cli
+.mcp.json
+.vscode
+.idea
+
+# Installed and built artefacts (rebuilt inside the image)
+**/node_modules
+**/.next
+**/.next-*
+**/out
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Local data: never belongs in an image
+data
+covers
+media
+**/.env
+**/.env.*
+
+# Browser test suite (web/e2e/.auth holds a signed session cookie)
+web/e2e
+web/playwright.config.ts
+web/playwright-report
+web/test-results
+
+# Not needed to build
+assets
+docs
+*.md
+**/AGENTS.md
+**/CLAUDE.md
+package.json
+package-lock.json
+Dockerfile
+compose.yaml

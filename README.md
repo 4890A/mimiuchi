@@ -53,8 +53,7 @@ A personal audio library web app for browsing and playing locally-stored audio w
 
 ## Prerequisites
 
-- Node.js 20+
-- [pnpm](https://pnpm.io/installation)
+- Node.js 20+ and [pnpm](https://pnpm.io/installation) — or Docker, see [Docker](#docker) below
 - A directory of audio works named by DLsite RJ code (e.g. `RJ01000380/...`), or archives named the same way (e.g. `【RJ01000380】【MP3】.zip`)
 - `ffmpeg` on your `PATH` — optional, only needed for the waveform seek bar (or point `KIKOERU_FFMPEG_PATH` at the binary)
 
@@ -71,6 +70,11 @@ Edit `web/.env.local` and set the variables below.
 
 ### Environment variables
 
+`KIKOERU_LIBRARY_ROOT` and `KIKOERU_COVERS_DIR` are fallbacks: once **Settings →
+Library paths** has a value, that value wins and the env var is ignored. The Settings
+page shows the env value as the placeholder so you can see which one is in
+effect. Leave the Settings fields blank to keep using the env vars.
+
 | Variable | Required | Description |
 | --- | --- | --- |
 | `KIKOERU_LIBRARY_ROOT` | yes | Absolute path to the folder containing your RJ-coded work directories |
@@ -80,6 +84,8 @@ Edit `web/.env.local` and set the variables below.
 | `KIKOERU_COVERS_DIR` | no | Where cover art is cached (defaults to `<project-root>/covers`) |
 | `KIKOERU_FFMPEG_PATH` | no | Path to the `ffmpeg` binary if it isn't on your `PATH` |
 | `KIKOERU_THUMBNAIL_CACHE_MB` | no | Ceiling for the gallery thumbnail cache in `<KIKOERU_DATA_DIR>/thumbnails` (default 512, `0` for no limit) |
+| `KIKOERU_TRANSCODE_CACHE_MB` | no | Ceiling for the transcoded-audio cache in `<KIKOERU_DATA_DIR>/transcodes` (default 4096, `0` for no limit) |
+| `KIKOERU_SECURE_COOKIES` | no | `false` lets the login cookie work over plain `http://<ip>` when running a production build without HTTPS. Unset, the cookie is marked Secure whenever `NODE_ENV=production` (i.e. under `pnpm start`), and browsers drop it on non-localhost HTTP origins |
 
 ## Running
 
@@ -148,6 +154,76 @@ would find them too, but only by re-fetching every listing.
 
 > A `pnpm scan` CLI script also exists (`web/scripts/scan.ts`) if you'd rather run the scan headlessly.
 
+### Docker
+
+An alternative to installing Node and pnpm. Nothing here changes how the
+node/pnpm setup above works; the two are independent.
+
+```bash
+git clone https://github.com/4890A/mimiuchi.git
+cd mimiuchi
+cp .env.docker.example .env      # then edit MIMIUCHI_LIBRARY and KIKOERU_PASSWORD
+docker compose up -d --build
+```
+
+Open `http://<host-ip>:3000`, log in, and press **Scan**. The image bundles
+`ffmpeg`, so the waveform seek bar and transcoding work out of the box. The
+root `.env` file is read only by Docker Compose; it does not interact with
+`web/.env.local`.
+
+**Where things live.** Your library is bind-mounted read-only at `/library`
+(the app never writes into it). Everything the app writes goes to two Docker
+volumes: `data` (the SQLite database, session secret, thumbnail and transcode
+caches) and `covers` (downloaded cover art). Both survive `docker compose down`
+and image rebuilds. Named volumes are used rather than bind mounts because
+SQLite's write-ahead log needs file locking that Docker Desktop's file sharing
+does not reliably provide; on a Linux host you can swap `data:/data` for a host
+path in `compose.yaml` if you prefer.
+
+**Multiple library folders.** Add more bind mounts under `/library` in
+`compose.yaml`, e.g. `/mnt/a:/library/a:ro` and `/mnt/b:/library/b:ro`, then
+either set `KIKOERU_LIBRARY_ROOT=/library/a:/library/b` under `environment:`
+(`:` is the separator inside the container) or list them one per line in
+**Settings → Library paths**.
+
+**Permissions.** The container runs as the unprivileged `node` user (uid 1000).
+If your library is not world-readable, add `user: "<uid>:<gid>"` to the service
+so it runs as the owner of those files.
+
+**HTTPS and cookies.** `compose.yaml` sets `KIKOERU_SECURE_COOKIES=false` so
+login works over plain HTTP on your LAN. If you put the app behind an HTTPS
+reverse proxy, set it to `true` in `.env`.
+
+**DLsite proxy.** Inside the container `localhost` is the container itself. A
+proxy running on the host machine is reachable as
+`http://host.docker.internal:<port>` in **Settings → DLsite → Proxy URL**.
+
+**Open folder.** The "Open folder" button on a work page is hidden in Docker,
+since there is no desktop for the container to hand the path to.
+
+**Upgrading.** `git pull && docker compose up -d --build`. Database migrations
+run on the first request after start. `docker compose logs -f app` shows the
+server log and `docker compose ps` reports the health check.
+
+### Moving an existing install into Docker
+
+Works are stored with the absolute path they were found at, so a database
+from a node/pnpm install still points at the old locations. Backup import
+re-homes every work by its RJ code under the current library roots, so:
+
+1. On the old install, **Settings → Backup → Download backup**.
+2. Start the container against the same library folder and log in.
+3. **Settings → Restore from backup → Choose file** and import it.
+4. Open **Settings → Library paths**. The restored settings still carry the old host's
+   library and cover paths (e.g. `D:\Audio\works`), and a value there overrides
+   the container's env vars. Clear both fields (blank means `/library` and
+   `/covers`), save, then run a **Scan**.
+
+Alternatively skip the backup and scan from scratch; you lose likes, play
+progress, bookmarks and manual edits. Non-DLsite works (`LOCAL-…` ids) are
+identified by a hash of their old path and cannot be re-homed, so they will
+be re-created as new works either way.
+
 ### Other scripts
 
 - `pnpm lint` — ESLint
@@ -161,5 +237,8 @@ would find them too, but only by re-fetching every listing.
 .
 ├── web/              App source, scripts, configs
 ├── data/             Database  (gitignored)
-└── covers/           Cached cover art (gitignored)
+├── covers/           Cached cover art (gitignored)
+├── Dockerfile        Optional container image (see Docker above)
+├── compose.yaml      Optional Docker Compose deployment
+└── .env.docker.example   Template for the compose `.env`
 ```
