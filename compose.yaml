@@ -13,10 +13,10 @@ services:
       KIKOERU_PASSWORD: ${KIKOERU_PASSWORD:-changeme}
       # Empty = unset: a secret is generated on first run and kept in /data.
       KIKOERU_SESSION_SECRET: ${KIKOERU_SESSION_SECRET:-}
-      # `next start` runs with NODE_ENV=production, which marks the login
-      # cookie Secure; browsers then drop it over plain http://<lan-ip>:3000.
-      # Leave false unless you serve the app through an HTTPS reverse proxy.
-      KIKOERU_SECURE_COOKIES: ${KIKOERU_SECURE_COOKIES:-false}
+      # Empty = follow each request: the login cookie is Secure over HTTPS
+      # and plain over http://<lan-ip>:3000. Set true only behind an HTTPS
+      # proxy that doesn't send X-Forwarded-Proto.
+      KIKOERU_SECURE_COOKIES: ${KIKOERU_SECURE_COOKIES:-}
       TZ: ${TZ:-UTC}
     volumes:
       # Your RJ-coded library. Read-only: the app never writes into it.

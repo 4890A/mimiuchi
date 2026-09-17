@@ -11,7 +11,11 @@ export async function proxy(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  const session = await getIronSession<SessionData>(req, res, sessionOptions);
+  const session = await getIronSession<SessionData>(
+    req,
+    res,
+    sessionOptions(req.headers.get("x-forwarded-proto")),
+  );
   if (!session.authenticated) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

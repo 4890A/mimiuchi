@@ -85,7 +85,7 @@ effect. Leave the Settings fields blank to keep using the env vars.
 | `KIKOERU_FFMPEG_PATH` | no | Path to the `ffmpeg` binary if it isn't on your `PATH` |
 | `KIKOERU_THUMBNAIL_CACHE_MB` | no | Ceiling for the gallery thumbnail cache in `<KIKOERU_DATA_DIR>/thumbnails` (default 512, `0` for no limit) |
 | `KIKOERU_TRANSCODE_CACHE_MB` | no | Ceiling for the transcoded-audio cache in `<KIKOERU_DATA_DIR>/transcodes` (default 4096, `0` for no limit) |
-| `KIKOERU_SECURE_COOKIES` | no | `false` lets the login cookie work over plain `http://<ip>` when running a production build without HTTPS. Unset, the cookie is marked Secure whenever `NODE_ENV=production` (i.e. under `pnpm start`), and browsers drop it on non-localhost HTTP origins |
+| `KIKOERU_SECURE_COOKIES` | no | Forces the login cookie's Secure flag (`true`/`false`). Unset, it follows each request: Secure over HTTPS (including behind a reverse proxy that sends `X-Forwarded-Proto: https`), not Secure over plain `http://<ip>`. Set `true` only if your HTTPS proxy doesn't send that header |
 
 ## Running
 
@@ -190,9 +190,11 @@ either set `KIKOERU_LIBRARY_ROOT=/library/a:/library/b` under `environment:`
 If your library is not world-readable, add `user: "<uid>:<gid>"` to the service
 so it runs as the owner of those files.
 
-**HTTPS and cookies.** `compose.yaml` sets `KIKOERU_SECURE_COOKIES=false` so
-login works over plain HTTP on your LAN. If you put the app behind an HTTPS
-reverse proxy, set it to `true` in `.env`.
+**HTTPS and cookies.** The login cookie is marked Secure only when the request
+came over HTTPS, so login works over plain HTTP on your LAN as-is. Behind an
+HTTPS reverse proxy that sends `X-Forwarded-Proto` (Caddy, Traefik and nginx's
+usual config all do), nothing needs setting. If yours doesn't, set
+`KIKOERU_SECURE_COOKIES=true` in `.env`.
 
 **DLsite proxy.** Inside the container `localhost` is the container itself. A
 proxy running on the host machine is reachable as
