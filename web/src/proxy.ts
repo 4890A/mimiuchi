@@ -1,12 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
-import { sessionOptions, type SessionData } from "./lib/auth/session";
+import {
+  isSessionValid,
+  sessionOptions,
+  type SessionData,
+} from "./lib/auth/session";
+import { setupNeeded } from "./lib/auth/password";
 
 const PUBLIC_PATHS = ["/login"];
 
+/** All a visitor can reach before a password exists: the setup page and the
+ *  folder browser it uses. */
+const SETUP_PATHS = ["/setup", "/api/folders"];
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+
+  // First run: no password yet, so nothing is protected and nothing can be
+  // signed into. Everything leads to /setup until it is done. The setup page
+  // itself refuses to run again afterwards.
+  if (setupNeeded()) {
+    if (SETUP_PATHS.includes(pathname)) return NextResponse.next();
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "setup required" }, { status: 401 });
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/setup";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  if (
+    pathname === "/setup" ||
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  ) {
     return NextResponse.next();
   }
 
@@ -16,7 +43,7 @@ export async function proxy(req: NextRequest) {
     res,
     sessionOptions(req.headers.get("x-forwarded-proto")),
   );
-  if (!session.authenticated) {
+  if (!isSessionValid(session)) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("from", pathname);

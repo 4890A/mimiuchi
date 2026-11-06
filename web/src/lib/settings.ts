@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "./db/client";
 import { settings as settingsTable } from "./db/schema";
+import { cleanPathInput, parsePathList } from "./paths";
 
 export interface AppSettings {
   dlsiteProxyUrl: string;
@@ -52,11 +53,7 @@ function writeKey(key: string, value: string): void {
 }
 
 function parseRoots(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return raw ? parsePathList(raw) : [];
 }
 
 function clampInterval(ms: number): number {
@@ -97,13 +94,11 @@ export function setSettings(partial: Partial<AppSettings>): AppSettings {
     writeKey(KEYS.dlsiteMinIntervalMs, String(value));
   }
   if (partial.libraryRoots !== undefined) {
-    const cleaned = partial.libraryRoots
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const cleaned = partial.libraryRoots.map(cleanPathInput).filter(Boolean);
     writeKey(KEYS.libraryRoots, cleaned.join("\n"));
   }
   if (partial.coversDir !== undefined) {
-    writeKey(KEYS.coversDir, partial.coversDir.trim());
+    writeKey(KEYS.coversDir, cleanPathInput(partial.coversDir));
   }
   if (partial.includeUnmatchedFolders !== undefined) {
     writeKey(

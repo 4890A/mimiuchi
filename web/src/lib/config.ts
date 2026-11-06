@@ -2,6 +2,7 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { cleanPathInput } from "./paths";
 
 function resolveDir(envVar: string, fallback: string): string {
   const v = process.env[envVar];
@@ -40,14 +41,15 @@ export const COVERS_DIR = DEFAULT_COVERS_DIR;
 
 export function resolveLibraryRoots(overrides?: string[] | null): string[] {
   const cleaned = (overrides ?? [])
-    .map((s) => s.trim())
+    .map(cleanPathInput)
     .filter(Boolean)
     .map((s) => path.resolve(s));
   return cleaned.length > 0 ? cleaned : DEFAULT_LIBRARY_ROOTS;
 }
 
 export function resolveCoversDir(override?: string | null): string {
-  return override?.trim() ? path.resolve(override.trim()) : DEFAULT_COVERS_DIR;
+  const cleaned = cleanPathInput(override ?? "");
+  return cleaned ? path.resolve(cleaned) : DEFAULT_COVERS_DIR;
 }
 
 function loadOrCreateSessionSecret(): string {
@@ -61,4 +63,4 @@ function loadOrCreateSessionSecret(): string {
 }
 
 export const SESSION_SECRET = loadOrCreateSessionSecret();
-export const PASSWORD = process.env.KIKOERU_PASSWORD ?? "changeme";
+// The login password is resolved in lib/auth/password.ts.

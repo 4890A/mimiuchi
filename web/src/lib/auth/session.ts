@@ -3,10 +3,35 @@ import { cookies, headers } from "next/headers";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { SESSION_SECRET } from "../config";
 import { secureCookie } from "./secure-cookie";
+import { passwordSource, passwordVersion } from "./password";
 
 export interface SessionData {
   authenticated?: boolean;
   loginAt?: number;
+  /** `passwordVersion()` at sign-in; see lib/auth/password. */
+  pwv?: string;
+}
+
+/**
+ * A session counts only while the password it signed in with is current.
+ * Changing a stored password signs every other device out, and deleting the
+ * password file (the "forgot my password" reset) signs out everyone.
+ */
+export function isSessionValid(session: SessionData): boolean {
+  if (!session.authenticated) return false;
+  if (passwordSource() === "unset") return false;
+  const version = passwordVersion();
+  return version === null || session.pwv === version;
+}
+
+/** Marks the session signed in against the current password, and saves it. */
+export async function signIn(
+  session: SessionData & { save(): Promise<void> },
+): Promise<void> {
+  session.authenticated = true;
+  session.loginAt = Date.now();
+  session.pwv = passwordVersion() ?? undefined;
+  await session.save();
 }
 
 /**
@@ -37,5 +62,5 @@ export async function getSession() {
 
 export async function isAuthenticated(): Promise<boolean> {
   const session = await getSession();
-  return Boolean(session.authenticated);
+  return isSessionValid(session);
 }

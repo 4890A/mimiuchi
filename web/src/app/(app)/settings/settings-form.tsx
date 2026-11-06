@@ -27,6 +27,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useScanProgress } from "@/components/scan-progress";
+import { FolderPicker } from "@/components/folder-picker";
+import { parsePathList } from "@/lib/paths";
 import { removeMissingWorks } from "@/lib/actions";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
@@ -56,7 +58,12 @@ export function SettingsForm({
   missingWorks,
 }: {
   initial: Settings;
-  effective: { libraryRoots: string[]; coversDir: string };
+  effective: {
+    libraryRoots: string[];
+    coversDir: string;
+    missingRoots: string[];
+    dataDir: string;
+  };
   missingSeiyuuCount: number;
   /** Works a scan found absent from disk, awaiting the user's go-ahead. */
   missingWorks: { id: string; title: string }[];
@@ -71,10 +78,7 @@ export function SettingsForm({
   const [saving, setSaving] = useState(false);
   const [test, setTest] = useState<TestResult>({ state: "idle" });
 
-  const rootsFromText = rootsText
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const rootsFromText = parsePathList(rootsText);
 
   const rootsChanged =
     rootsFromText.length !== saved.libraryRoots.length ||
@@ -253,11 +257,27 @@ export function SettingsForm({
               rows={Math.max(3, effective.libraryRoots.length + 1)}
               className="font-mono text-xs"
             />
+            <div className="flex justify-end">
+              <FolderPicker
+                label={t("settings.paths.addFolder")}
+                onPick={(picked) => {
+                  if (rootsFromText.includes(picked)) return;
+                  setRootsText([...rootsFromText, picked].join("\n"));
+                }}
+              />
+            </div>
             <div className="text-xs text-muted-foreground">
               {t("settings.paths.effective")}
               <ul className="mt-1 space-y-0.5">
                 {effective.libraryRoots.map((r) => (
-                  <li key={r} className="font-mono">{r}</li>
+                  <li key={r} className="font-mono">
+                    {r}
+                    {effective.missingRoots.includes(r) && (
+                      <span className="ml-2 font-sans text-destructive">
+                        {t("settings.paths.notFound")}
+                      </span>
+                    )}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -279,6 +299,10 @@ export function SettingsForm({
               <span className="font-mono">{effective.coversDir}</span>
             </p>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.paths.dataDir")}{" "}
+            <span className="font-mono">{effective.dataDir}</span>
+          </p>
           <div className="space-y-1.5 border-t pt-4">
             <label className="flex items-center gap-2 text-sm">
               <input

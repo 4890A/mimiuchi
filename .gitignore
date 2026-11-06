@@ -29,6 +29,10 @@ data/*.db-shm
 data/*.db-wal
 data/*.sqlite
 data/*.sqlite-*
+# Credentials: the cookie signing key and the in-app password's hash.
+data/session-secret
+data/password
+data/password.*.tmp
 # Derived audio, rebuilt on demand — see lib/transcode.
 data/transcodes/
 # Downscaled extra illustrations, rebuilt on demand — see lib/assets/thumbnail.

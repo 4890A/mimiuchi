@@ -10,7 +10,9 @@ services:
     ports:
       - "${MIMIUCHI_PORT:-3000}:3000"
     environment:
-      KIKOERU_PASSWORD: ${KIKOERU_PASSWORD:-changeme}
+      # Empty means "choose one in the browser on first visit" (stored in the
+      # data volume). Set it in .env to manage the password here instead.
+      KIKOERU_PASSWORD: ${KIKOERU_PASSWORD:-}
       # Empty = unset: a secret is generated on first run and kept in /data.
       KIKOERU_SESSION_SECRET: ${KIKOERU_SESSION_SECRET:-}
       # Empty = follow each request: the login cookie is Secure over HTTPS

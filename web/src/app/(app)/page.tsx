@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Filter } from "lucide-react";
@@ -23,8 +24,19 @@ import {
 import { LibraryGridSize } from "./_library-grid";
 import { OnDeck } from "@/components/on-deck";
 import { getTranslations } from "@/lib/i18n/server";
+import { EmptyLibrary } from "@/components/empty-library";
+import { resolveLibraryRoots } from "@/lib/config";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
+
+function isDirectory(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 interface SearchParams {
   q?: string;
@@ -35,6 +47,8 @@ interface SearchParams {
   zip?: string;
   sort?: "title" | "release" | "added";
   dir?: "asc" | "desc";
+  /** Set by first-run setup; the empty library then starts the first scan. */
+  welcome?: string;
 }
 
 export default async function LibraryPage({
@@ -94,7 +108,9 @@ export default async function LibraryPage({
   // Passed to each card so its tag/seiyuu chips add to the current filters
   // rather than replacing them.
   const currentQuery = new URLSearchParams(
-    Object.entries(sp).filter((e): e is [string, string] => Boolean(e[1])),
+    Object.entries(sp).filter(
+      (e): e is [string, string] => Boolean(e[1]) && e[0] !== "welcome",
+    ),
   ).toString();
 
   const activeFilterCount =
@@ -205,15 +221,17 @@ export default async function LibraryPage({
 
       {recent.length > 0 && <OnDeck works={recent} initialRandom={random} />}
 
-      {works.length === 0 ? (
+      {works.length === 0 && hasFilters ? (
         <div className="rounded-xl border border-dashed bg-muted/30 px-6 py-16 text-center">
-          <p className="text-lg font-medium">{t("library.empty.title")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("library.empty.before")}
-            <code className="rounded bg-muted px-1.5 py-0.5">RJ123456</code>
-            {t("library.empty.after")}
-          </p>
+          <p className="text-lg font-medium">{t("library.empty.noMatches")}</p>
         </div>
+      ) : works.length === 0 ? (
+        <EmptyLibrary
+          welcome={sp.welcome === "1"}
+          noFolders={resolveLibraryRoots(getSettings().libraryRoots).every(
+            (r) => !isDirectory(r),
+          )}
+        />
       ) : (
         <LibraryGridSize>
           {works.map((w) => (

@@ -69,7 +69,11 @@ export const en = {
   "library.empty.title": "No works yet",
   "library.empty.before": "Drop folders named like ",
   "library.empty.after":
-    " into your library directory, then click the refresh button in the top bar to scan.",
+    " into your library folder, then scan.",
+  "library.empty.noMatches": "No works match these filters.",
+  "library.empty.noFolders":
+    "None of your library folders could be found. Check them in Settings.",
+  "library.empty.openSettings": "Open Settings",
   "library.cardSize": "Card size",
 
   // ── Sorting ───────────────────────────────────────────────────────────────
@@ -235,6 +239,50 @@ export const en = {
   "login.password": "Password",
   "login.error": "Incorrect password",
   "login.submit": "Sign in",
+  "login.forgotEnv":
+    "The password is set by the KIKOERU_PASSWORD environment variable.",
+  "login.forgotStored":
+    "Forgot it? On the computer running mimiuchi, delete the file named “password” in its data folder, then reload this page to choose a new one.",
+
+  "setup.subtitle": "Welcome! Two quick things and your library is ready.",
+  "setup.folders.title": "1. Where are your works?",
+  "setup.folders.hint":
+    "Choose the folder that holds your RJ-numbered folders or archives. You can add more than one, and change them later in Settings. Nothing in these folders is ever changed.",
+  "setup.folders.choose": "Choose folder…",
+  "setup.folders.addAnother": "Add another folder…",
+  "setup.folders.remove": "Remove {path}",
+  "setup.folders.pastePlaceholder": "…or paste a folder path, e.g. D:\\Voice works",
+  "setup.folders.add": "Add folder",
+  "setup.password.title": "2. Choose a password",
+  "setup.password.hint":
+    "You’ll use it to sign in, including from your phone or other devices on your network.",
+  "setup.password.new": "Password",
+  "setup.password.confirm": "Type it again",
+  "setup.submit": "Start",
+
+  "auth.error.passwordTooShort": "The password needs at least {min} characters.",
+  "auth.error.passwordMismatch": "The two passwords don’t match.",
+  "auth.error.noFolders": "Choose at least one folder.",
+  "auth.error.folderMissing": "Can’t find this folder: {paths}",
+  "auth.error.alreadySetUp":
+    "Setup was already completed. Reload the page to sign in.",
+  "auth.error.wrongPassword": "The current password is wrong.",
+  "auth.error.managedByEnv":
+    "The password is set by the KIKOERU_PASSWORD environment variable.",
+
+  "folders.browse": "Browse…",
+  "folders.title": "Choose a folder",
+  "folders.description":
+    "Folders on the computer running mimiuchi. Open the one that holds your works, then press Choose.",
+  "folders.up": "Up one level",
+  "folders.thisComputer": "This computer",
+  "folders.cannotOpen": "Can’t open this folder ({error}).",
+  "folders.noSubfolders": "No folders inside.",
+  "folders.worksHere": "{count} works found directly in this folder",
+  "folders.worksHere_one": "1 work found directly in this folder",
+  "folders.noWorksHere":
+    "No RJ-numbered items directly in here. That’s fine if they’re in subfolders.",
+  "folders.choose": "Choose this folder",
 
   // ── Settings: language ────────────────────────────────────────────────────
   "settings.title": "Settings",
@@ -308,10 +356,23 @@ export const en = {
   // ── Settings: paths ───────────────────────────────────────────────────────
   "settings.paths.title": "Library paths",
   "settings.paths.description":
-    "Leave blank to use env defaults (KIKOERU_LIBRARY_ROOT, KIKOERU_COVERS_DIR).",
-  "settings.paths.roots": "Library roots (one path per line)",
+    "The folders mimiuchi looks in for works. Nothing in them is ever changed. A blank field uses the default (on a server install, the KIKOERU_LIBRARY_ROOT / KIKOERU_COVERS_DIR environment variables).",
+  "settings.paths.roots": "Library folders (one per line)",
   "settings.paths.covers": "Covers directory",
   "settings.paths.effective": "Effective:",
+  "settings.paths.addFolder": "Add folder…",
+  "settings.paths.notFound": "not found",
+  "settings.paths.dataDir": "Database and caches:",
+  "settings.password.title": "Password",
+  "settings.password.description":
+    "Changing it signs out every other device.",
+  "settings.password.envManaged":
+    "Set by the KIKOERU_PASSWORD environment variable. Change it there and restart.",
+  "settings.password.current": "Current password",
+  "settings.password.new": "New password",
+  "settings.password.confirm": "New password again",
+  "settings.password.submit": "Change password",
+  "settings.password.changed": "Password changed",
   "settings.paths.includeUnmatched": "Add folders that have no work id",
   "settings.paths.includeUnmatchedHint":
     "A folder holding audio but no RJ/VJ/BJ code — a Comiket release, loose files, anything bought outside DLsite — becomes a work of its own, titled after the folder. Nothing is looked up: fill in the details with Edit. Off by default.",
@@ -515,7 +576,11 @@ export const ja: Record<TranslationKey, string> = {
   "library.empty.title": "作品がまだありません",
   "library.empty.before": "",
   "library.empty.after":
-    " のような名前のフォルダーをライブラリのディレクトリに置き、上部バーの更新ボタンを押してスキャンしてください。",
+    " のような名前のフォルダーをライブラリのフォルダーに置いて、スキャンしてください。",
+  "library.empty.noMatches": "条件に一致する作品がありません。",
+  "library.empty.noFolders":
+    "ライブラリのフォルダーが見つかりません。設定を確認してください。",
+  "library.empty.openSettings": "設定を開く",
   "library.cardSize": "カードの大きさ",
 
   // ── Sorting ───────────────────────────────────────────────────────────────
@@ -683,6 +748,50 @@ export const ja: Record<TranslationKey, string> = {
   "login.password": "パスワード",
   "login.error": "パスワードが違います",
   "login.submit": "サインイン",
+  "login.forgotEnv":
+    "パスワードは環境変数 KIKOERU_PASSWORD で設定されています。",
+  "login.forgotStored":
+    "パスワードを忘れた場合は、mimiuchi を動かしているパソコンでデータフォルダー内の「password」というファイルを削除し、このページを再読み込みして新しいパスワードを設定してください。",
+
+  "setup.subtitle": "ようこそ！2つの設定だけでライブラリの準備が整います。",
+  "setup.folders.title": "1. 作品はどこにありますか？",
+  "setup.folders.hint":
+    "RJ番号のフォルダーやアーカイブが入っているフォルダーを選んでください。複数選ぶこともでき、あとから設定で変更できます。フォルダーの中身が変更されることはありません。",
+  "setup.folders.choose": "フォルダーを選ぶ…",
+  "setup.folders.addAnother": "フォルダーを追加…",
+  "setup.folders.remove": "{path} を外す",
+  "setup.folders.pastePlaceholder": "…またはフォルダーのパスを貼り付け（例：D:\\Voice works）",
+  "setup.folders.add": "フォルダーを追加",
+  "setup.password.title": "2. パスワードを決める",
+  "setup.password.hint":
+    "サインインに使います。スマートフォンなど、同じネットワーク上のほかの端末からも使えます。",
+  "setup.password.new": "パスワード",
+  "setup.password.confirm": "もう一度入力",
+  "setup.submit": "はじめる",
+
+  "auth.error.passwordTooShort": "パスワードは{min}文字以上にしてください。",
+  "auth.error.passwordMismatch": "2つのパスワードが一致しません。",
+  "auth.error.noFolders": "フォルダーを1つ以上選んでください。",
+  "auth.error.folderMissing": "フォルダーが見つかりません：{paths}",
+  "auth.error.alreadySetUp":
+    "セットアップはすでに完了しています。ページを再読み込みしてサインインしてください。",
+  "auth.error.wrongPassword": "現在のパスワードが違います。",
+  "auth.error.managedByEnv":
+    "パスワードは環境変数 KIKOERU_PASSWORD で設定されています。",
+
+  "folders.browse": "参照…",
+  "folders.title": "フォルダーを選ぶ",
+  "folders.description":
+    "mimiuchi を動かしているパソコンのフォルダーです。作品が入っているフォルダーを開いて「このフォルダーを選ぶ」を押してください。",
+  "folders.up": "1つ上へ",
+  "folders.thisComputer": "このパソコン",
+  "folders.cannotOpen": "このフォルダーを開けません（{error}）。",
+  "folders.noSubfolders": "フォルダーがありません。",
+  "folders.worksHere": "このフォルダーの直下に{count}件の作品があります",
+  "folders.worksHere_one": "このフォルダーの直下に1件の作品があります",
+  "folders.noWorksHere":
+    "直下にRJ番号のものはありません。サブフォルダーの中にあるなら問題ありません。",
+  "folders.choose": "このフォルダーを選ぶ",
 
   // ── Settings: language ────────────────────────────────────────────────────
   "settings.title": "設定",
@@ -756,10 +865,23 @@ export const ja: Record<TranslationKey, string> = {
   // ── Settings: paths ───────────────────────────────────────────────────────
   "settings.paths.title": "ライブラリのパス",
   "settings.paths.description":
-    "空欄にすると環境変数の既定値（KIKOERU_LIBRARY_ROOT、KIKOERU_COVERS_DIR）を使用します。",
-  "settings.paths.roots": "ライブラリのルート（1行に1パス）",
+    "作品を探すフォルダーです。中身が変更されることはありません。空欄の項目は既定値（サーバーとして動かしている場合は環境変数 KIKOERU_LIBRARY_ROOT／KIKOERU_COVERS_DIR）を使います。",
+  "settings.paths.roots": "ライブラリのフォルダー（1行に1つ）",
   "settings.paths.covers": "カバー画像のディレクトリ",
   "settings.paths.effective": "実際の値：",
+  "settings.paths.addFolder": "フォルダーを追加…",
+  "settings.paths.notFound": "見つかりません",
+  "settings.paths.dataDir": "データベースとキャッシュ：",
+  "settings.password.title": "パスワード",
+  "settings.password.description":
+    "変更すると、ほかの端末はすべてサインアウトされます。",
+  "settings.password.envManaged":
+    "環境変数 KIKOERU_PASSWORD で設定されています。変更するにはそちらを書き換えて再起動してください。",
+  "settings.password.current": "現在のパスワード",
+  "settings.password.new": "新しいパスワード",
+  "settings.password.confirm": "新しいパスワード（確認）",
+  "settings.password.submit": "パスワードを変更",
+  "settings.password.changed": "パスワードを変更しました",
   "settings.paths.includeUnmatched": "作品IDのないフォルダーも取り込む",
   "settings.paths.includeUnmatchedHint":
     "RJ/VJ/BJ番号がなく音声ファイルを含むフォルダー（同人即売会の頒布物、バラの音源、DLsite以外で入手したものなど）を、フォルダー名をタイトルとした作品として登録します。情報の取得は行われないので、詳細は「編集」から手入力してください。既定はオフです。",
