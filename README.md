@@ -62,7 +62,7 @@ A personal audio library web app for browsing and playing locally-stored audio w
 | --- | --- | --- |
 | [Windows portable zip](#windows-portable-zip) | Anyone on Windows | Nothing. Unzip and double-click |
 | [Docker](#docker) | A home server / NAS | Docker |
-| [From source](#setup) | Development, or Linux/macOS without Docker | Node.js 20+ and pnpm |
+| [From source](#setup) | Development, or Linux/macOS without Docker | Node.js 22.19+ and pnpm |
 
 All three ask for your library folder and a password in the browser on first
 visit.
@@ -119,7 +119,9 @@ cannot hold pnpm's links; the SWC compiler dropped by shipping a transpiled
 
 ## Prerequisites (from source)
 
-- Node.js 20+ and [pnpm](https://pnpm.io/installation) — or Docker, see [Docker](#docker) below
+- Node.js 22.19+ (undici needs it) and [pnpm](https://pnpm.io/installation) — or Docker, see [Docker](#docker) below.
+  If pnpm manages your Node (`pnpm config get use-node-version` prints a version),
+  that is the one that runs the app: `pnpm env use --global 22` updates it
 - A directory of audio works named by DLsite RJ code (e.g. `RJ01000380/...`), or archives named the same way (e.g. `【RJ01000380】【MP3】.zip`)
 - `ffmpeg` on your `PATH` — optional, only needed for the waveform seek bar (or point `KIKOERU_FFMPEG_PATH` at the binary)
 

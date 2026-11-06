@@ -108,6 +108,10 @@ $nodeExe = Join-Path $nodeDir "node.exe"
 # Everything below runs `node` from PATH (pnpm.exe's scripts, prebuild-install,
 # next build), so the bundled runtime goes first.
 $env:PATH = "$nodeDir;$env:PATH"
+# PATH is not enough where pnpm manages Node itself: a `use-node-version` in
+# pnpm's config makes it run every script on that version instead. Pin it to
+# the bundled one (pnpm fetches its own copy of the same release).
+$env:npm_config_use_node_version = $NodeVersion
 $env:NEXT_TELEMETRY_DISABLED = "1"
 # Build workers load lib/config (which writes a session secret) and may open
 # the database. Point both at a throwaway folder, never at your real data.
