@@ -99,6 +99,14 @@ pnpm -C web package:windows
 pwsh packaging\windows\build.ps1 -FfmpegExe C:\path\to\ffmpeg.exe
 ```
 
+**Releasing.** `.github/workflows/release-windows.yml` runs the same script on
+GitHub. Set `version` in `web/package.json`, commit, then
+`git tag v<version>; git push origin v<version>`. The workflow builds the zip and
+publishes a GitHub Release with it attached; it refuses a tag that doesn't
+match `package.json`. Running the workflow by hand (Actions → Windows release →
+Run workflow, or `gh workflow run release-windows.yml`) builds without
+releasing and leaves the zip under the run's Artifacts.
+
 The output is `dist\windows\mimiuchi-<version>-windows-x64.zip` plus a `.sha256`. The
 script downloads the latest Node.js 22 for win-x64 (checksum verified, cached),
 builds from a clean copy of `web\` in `dist\windows\work`, and never touches your
