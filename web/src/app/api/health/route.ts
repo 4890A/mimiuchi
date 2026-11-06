@@ -2,7 +2,10 @@ export const dynamic = "force-dynamic";
 
 /** Liveness probe for container orchestrators. Deliberately touches nothing
  *  (no DB, no session) so it answers even before the first migration runs.
- *  Exempted from the auth proxy in `src/proxy.ts`. */
+ *  Exempted from the auth proxy in `src/proxy.ts`.
+ *
+ *  `app` lets the Windows launcher tell "mimiuchi is already running on this
+ *  port" apart from "something else has the port". */
 export function GET() {
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, app: "mimiuchi" });
 }

@@ -48,10 +48,68 @@ A personal audio library web app for browsing and playing locally-stored audio w
   was emptied, so an unplugged drive changes nothing
 - A track whose file has gone says so and the queue moves on, instead of the
   player stalling on it
-- Single shared password login
+- First-run setup in the browser: pick your library folders (with a folder
+  browser that shows how many works it sees) and choose a password. No config
+  files to edit
+- Single shared password login, changeable in Settings (which signs other
+  devices out)
 - Configure library roots, cover directory, and an optional outbound proxy from the settings page
+- A portable Windows build: unzip, double-click `mimiuchi.exe`, no Node.js needed
 
-## Prerequisites
+## Three ways to run it
+
+| | For | Needs |
+| --- | --- | --- |
+| [Windows portable zip](#windows-portable-zip) | Anyone on Windows | Nothing. Unzip and double-click |
+| [Docker](#docker) | A home server / NAS | Docker |
+| [From source](#setup) | Development, or Linux/macOS without Docker | Node.js 20+ and pnpm |
+
+All three ask for your library folder and a password in the browser on first
+visit.
+
+## Windows portable zip
+
+**Using it.** Download `mimiuchi-<version>-windows-x64.zip`, extract it (right-click →
+**Extract All…**), and double-click `mimiuchi.exe`. A console window opens and shows
+the addresses to use on this computer and on your phone, and your browser opens
+the setup page. The window is the on/off switch: close it to stop the server.
+The `README.txt` inside the zip walks a non-technical user through all of this,
+including the SmartScreen and firewall prompts, in English and Japanese.
+
+Because the zip is unsigned, Windows SmartScreen shows "Windows protected your
+PC" the first time; **More info → Run anyway** gets past it.
+
+**Where things live.** The app folder holds no personal data. The database,
+cover art, caches, password hash and log go to `%LOCALAPPDATA%\mimiuchi` (override
+with the `MIMIUCHI_HOME` environment variable), so upgrading is "delete the old
+folder, extract the new one". Optional `ffmpeg\ffmpeg.exe` next to `mimiuchi.exe`
+enables the waveform seek bar and WAV transcoding.
+
+**Launcher behaviour.** Port 3000 by default (`--port`, or `PORT`). If mimiuchi is
+already running there, a second double-click just opens the browser. If another
+program has the port, it takes the next free one and says so. Server output goes
+to `%LOCALAPPDATA%\mimiuchi\logs\server.log`; only errors appear in the window, so
+the phone address stays on screen.
+
+**Building it** (on Windows, from the repo root):
+
+```powershell
+pnpm -C web package:windows
+# or, bundling an ffmpeg build you are allowed to redistribute:
+pwsh packaging\windows\build.ps1 -FfmpegExe C:\path\to\ffmpeg.exe
+```
+
+The output is `dist\windows\mimiuchi-<version>-windows-x64.zip` plus a `.sha256`. The
+script downloads the latest Node.js 22 for win-x64 (checksum verified, cached),
+builds from a clean copy of `web\` in `dist\windows\work`, and never touches your
+`web\.next`, `node_modules`, or data. The build needs network access, for the
+Node download and for `next/font`. See the header of
+`packaging/windows/build.ps1` for the details: flat `node_modules`, since a zip
+cannot hold pnpm's links; the SWC compiler dropped by shipping a transpiled
+`next.config.js`; and a smoke test of the native modules under the bundled
+`node.exe`.
+
+## Prerequisites (from source)
 
 - Node.js 20+ and [pnpm](https://pnpm.io/installation) — or Docker, see [Docker](#docker) below
 - A directory of audio works named by DLsite RJ code (e.g. `RJ01000380/...`), or archives named the same way (e.g. `【RJ01000380】【MP3】.zip`)
@@ -63,10 +121,11 @@ A personal audio library web app for browsing and playing locally-stored audio w
 git clone https://github.com/4890A/mimiuchi.git
 cd mimiuchi/web
 pnpm install
-cp .env.example .env.local
 ```
 
-Edit `web/.env.local` and set the variables below.
+That's all the configuration needed: on first visit the app asks for your
+library folder(s) and a password. To manage either from the environment instead
+(for a headless box, say), `cp .env.example .env.local` and set the variables below.
 
 ### Environment variables
 
@@ -77,8 +136,8 @@ effect. Leave the Settings fields blank to keep using the env vars.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `KIKOERU_LIBRARY_ROOT` | yes | Absolute path to the folder containing your RJ-coded work directories |
-| `KIKOERU_PASSWORD` | yes | Shared password used to log in (any non-empty string) |
+| `KIKOERU_LIBRARY_ROOT` | no | Absolute path to the folder containing your RJ-coded work directories. Usually set on the setup page instead |
+| `KIKOERU_PASSWORD` | no | Shared login password. When set it always wins and the in-app password form is hidden. Unset, you choose one on the setup page; it is stored as a scrypt hash in `<KIKOERU_DATA_DIR>/password`, and deleting that file resets it (the setup page comes back, library intact). There is no default password any more |
 | `KIKOERU_SESSION_SECRET` | no | Overrides the session-cookie signing key. If unset, a random 32-byte secret is generated on first run and stored in `<KIKOERU_DATA_DIR>/session-secret` |
 | `KIKOERU_DATA_DIR` | no | Where the SQLite database lives (defaults to `../data` relative to `web/`) |
 | `KIKOERU_COVERS_DIR` | no | Where cover art is cached (defaults to `<project-root>/covers`) |
@@ -137,7 +196,16 @@ fresh checkout provisions an empty database on startup, so there's no manual
 migration step. (Existing databases from before automatic migrations are
 detected and left untouched.)
 
-On first visit, log in with `KIKOERU_PASSWORD`. Then trigger a library scan from the in-app **Scan** button — it walks your library root, fetches metadata, and streams progress to a panel in the bottom-right. Re-run whenever you add new works.
+On first visit you land on the setup page: pick your library folder(s) and a
+password (or, with `KIKOERU_PASSWORD` set, just log in). The first scan then starts
+by itself. It walks your library folders, fetches metadata, and streams
+progress to a panel in the bottom-right. Re-run it from the **Scan** button
+whenever you add new works.
+
+> **Upgrading an install that never set `KIKOERU_PASSWORD`?** It used to fall
+> back to `changeme`. That default is gone: such an install now shows the setup
+> page once, so you can choose a real password. Installs that set the variable
+> are unaffected.
 
 > Upgrading from a version without the extras panel? Just scan once. The first
 > scan after the upgrade re-walks every work to index its non-audio files, then
@@ -162,11 +230,12 @@ node/pnpm setup above works; the two are independent.
 ```bash
 git clone https://github.com/4890A/mimiuchi.git
 cd mimiuchi
-cp .env.docker.example .env      # then edit MIMIUCHI_LIBRARY and KIKOERU_PASSWORD
+cp .env.docker.example .env      # then set MIMIUCHI_LIBRARY
 docker compose up -d --build
 ```
 
-Open `http://<host-ip>:3000`, log in, and press **Scan**. The image bundles
+Open `http://<host-ip>:3000` and choose a password; `/library` is already filled
+in, and the first scan starts on its own. The image bundles
 `ffmpeg`, so the waveform seek bar and transcoding work out of the box. The
 root `.env` file is read only by Docker Compose; it does not interact with
 `web/.env.local`.
@@ -240,6 +309,7 @@ be re-created as new works either way.
 ├── web/              App source, scripts, configs
 ├── data/             Database  (gitignored)
 ├── covers/           Cached cover art (gitignored)
+├── packaging/windows Portable Windows build (launcher, build script, user README)
 ├── Dockerfile        Optional container image (see Docker above)
 ├── compose.yaml      Optional Docker Compose deployment
 └── .env.docker.example   Template for the compose `.env`

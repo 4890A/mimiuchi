@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- mimiuchi app icon: a pair of headphones over sound bars. Plain shapes,
+       no fonts, so it renders the same on any build machine. -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#1f1b2e"/>
+  <path d="M60 150 V128 a68 68 0 0 1 136 0 V150" fill="none" stroke="#f4eefc"
+        stroke-width="18" stroke-linecap="round"/>
+  <rect x="44" y="140" width="40" height="66" rx="16" fill="#f4eefc"/>
+  <rect x="172" y="140" width="40" height="66" rx="16" fill="#f4eefc"/>
+  <rect x="104" y="156" width="12" height="34" rx="6" fill="#c9a7ff"/>
+  <rect x="122" y="140" width="12" height="66" rx="6" fill="#c9a7ff"/>
+  <rect x="140" y="160" width="12" height="26" rx="6" fill="#c9a7ff"/>
+</svg>
